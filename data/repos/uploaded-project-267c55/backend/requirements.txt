@@ -1,0 +1,24 @@
+fastapi
+uvicorn
+sqlalchemy
+pydantic
+passlib[bcrypt]
+bcrypt==4.0.1
+python-jose[cryptography]
+python-multipart
+slowapi
+redis
+pywebpush
+twilio
+razorpay
+pyotp
+python-dotenv
+requests
+psycopg2-binary
+qrcode
+
+# ---- Test suite (backend/tests/) ----
+pytest
+httpx
+reportlab==4.2.5
+pytest-cov

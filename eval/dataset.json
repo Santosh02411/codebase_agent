@@ -1,0 +1,7 @@
+[
+  {"question": "Where is the delivery ETA calculated?", "expected_files": ["services/eta.py"]},
+  {"question": "How is the payload validated when creating a delivery?", "expected_files": ["services/validation.py"]},
+  {"question": "Where is authentication implemented?", "expected_files": ["auth.py"]},
+  {"question": "Where is create_delivery defined?", "expected_files": ["delivery_app.py"]},
+  {"question": "What is the default speed used for deliveries?", "expected_files": ["services/eta.py"]}
+]

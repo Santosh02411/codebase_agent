@@ -1,0 +1,124 @@
+name: CI
+
+# Runs on every push and pull request — three independent jobs so a
+# frontend-only change doesn't wait on the (slower) backend test suite,
+# and a failure in one is easy to spot without digging through a single
+# combined log. All three must pass for a PR to be mergeable if branch
+# protection is turned on for this repo.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend-tests:
+    name: Backend tests + coverage
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run test suite with coverage
+        # TESTING=1 is what backend/app/services/backup_scheduler.py and
+        # rate_limiter.py check to disable themselves for tests — see
+        # tests/conftest.py, which already sets this for every local run;
+        # set explicitly here too since this step doesn't go through
+        # conftest until pytest itself starts.
+        env:
+          TESTING: "1"
+        run: pytest -v --cov=app --cov-report=term-missing --cov-report=xml
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend/coverage.xml
+
+  frontend-build:
+    name: Frontend tests + build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run frontend unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+  docker-build:
+    name: Docker image build check
+    runs-on: ubuntu-latest
+    # Doesn't depend on the two jobs above — a Docker build failure is a
+    # different kind of problem (Dockerfile/dependency issue) from a
+    # test or build failure, and there's no reason to wait on either to
+    # find out about it. Only BUILDS the images (proves the Dockerfiles
+    # still work end to end); doesn't push them anywhere, since this
+    # project has no container registry configured.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: docker build -t delivery-sync-backend:ci ./backend
+
+      - name: Build frontend image
+        run: docker build -t delivery-sync-frontend:ci --build-arg VITE_API_BASE_URL=http://localhost:8000 ./frontend
+
+  mobile-config-check:
+    name: Mobile app tests + config check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    # Doesn't run a full EAS build (that needs a paid/free Expo account
+    # and credentials this repo doesn't have configured as CI secrets)
+    # — runs the real unit test suite plus proves the dependency graph
+    # resolves and app.json is valid Expo config, catching the most
+    # likely ways this subproject could silently rot (a version bump
+    # breaking the dependency graph, an app.json typo, or a regression
+    # in the offline queue's retry/backoff logic) without needing real
+    # build infra.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Validate Expo config
+        run: npx expo config --type public

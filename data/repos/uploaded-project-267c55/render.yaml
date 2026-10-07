@@ -1,0 +1,148 @@
+# Render Blueprint — deploys this whole app (backend API, frontend
+# static site, managed Postgres) from one file. On render.com:
+# New -> Blueprint -> point at this repo -> Render reads this file
+# and provisions everything below automatically.
+#
+# This mirrors docker-compose.yml's local setup (same environment
+# variables, same ENVIRONMENT=production behavior) but on Render
+# instead of your own machine — see docker-compose.yml's own comments
+# for what ENVIRONMENT=production actually changes in the backend.
+#
+# ALWAYS-ON, not the free tier: every plan below is Render's cheapest
+# PAID tier rather than `free`, specifically so nothing here spins
+# down after 15 minutes idle (the free tier's behavior) or expires
+# after some weeks (the free Postgres tier's behavior) — see each
+# service's own comment for specifics. Render renamed its plan IDs at
+# some point after this file was first written — from names like
+# `free`/`starter`/`standard` to CPU/RAM-based IDs like `0.5c-512mb` —
+# the IDs below are the current ones per Render's own Blueprint spec
+# (render.com/docs/blueprint-spec) as of when this was last edited;
+# Render's pricing page is the source of truth if these ever look
+# wrong, since a platform can rename or reprice its own tiers at any
+# time without this repo knowing.
+#
+# After the first deploy, go to the backend service's Environment tab
+# and fill in the sync:false variables below (SMTP_USERNAME,
+# SMTP_PASSWORD, FROM_EMAIL) so real emails actually send instead of
+# just printing to the log — Render prompts for each one during Blueprint
+# creation. Every OTHER optional integration (SMS/WhatsApp via Twilio,
+# your own VAPID keys instead of the shared built-in default, Razorpay,
+# Google Maps, Sign in with Google) already works with no config at all
+# (console-logged / honestly no-op instead) — add those later only if
+# you actually want that specific feature turned on; nothing here is
+# required to get a fully working deploy. Real-time dispatcher<->agent
+# messaging (WebSocket) and Expo push to the mobile app need no backend
+# config at all — see this file's own notes on both below.
+
+databases:
+  - name: delivery-sync-db
+    # 0.1c-256mb: Render's cheapest PAID Postgres tier — no 0.1 CPU /
+    # 256 MB is not a lot of headroom for a real production database,
+    # but it's more than enough for a portfolio piece, and critically
+    # it does NOT expire the way the free tier does. Bump this to
+    # 0.5c-1g or higher later if real usage needs more.
+    plan: 0.1c-256mb
+    databaseName: delivery_sync
+    user: delivery_sync
+
+services:
+  - type: web
+    name: delivery-sync-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    # 0.5c-512mb: Render's cheapest PAID web service tier — the
+    # specific thing that makes this "always live": paid services
+    # don't spin down after 15 minutes idle the way the free tier
+    # does. This also matters beyond just uptime — a spun-down
+    # backend silently drops any open WebSocket connection (real-time
+    # dispatcher<->agent messaging) the moment it sleeps, so staying
+    # on `free` here would make real-time messaging look flaky/broken
+    # in a way that has nothing to do with the messaging code itself.
+    plan: 0.5c-512mb
+    healthCheckPath: /health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: delivery-sync-db
+          property: connectionString
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: ALLOWED_ORIGINS
+        # Render assigns the frontend's URL once it's first created;
+        # update this to the actual https://delivery-sync-frontend...
+        # .onrender.com URL after that first deploy, then redeploy the
+        # backend — see README.md's Deploying section for the exact
+        # steps. Left as a placeholder here rather than guessed, since
+        # a wrong value here means a real, visible CORS failure rather
+        # than a silent one — better to hit that once and fix it than
+        # have this file quietly claim a URL that isn't real yet.
+        value: https://CHANGE-ME-after-first-deploy.onrender.com
+      - key: FRONTEND_URL
+        value: https://CHANGE-ME-after-first-deploy.onrender.com
+      # ---- Email (SMTP) — for real password-reset/order emails ----
+      # Host/port are safe, public defaults (Gmail's) — override them
+      # in the dashboard if you're using a different provider. Username/
+      # password/from-address are per-account secrets, so those three
+      # are sync:false: Render prompts for them once, during Blueprint
+      # creation, rather than this file ever holding real credentials.
+      # Easiest free option: a Gmail account with an "App Password"
+      # (Google Account -> Security -> App Passwords). Without these
+      # filled in, the app still works exactly as it does locally with
+      # no .env — every email just prints to this service's log instead
+      # of actually sending, so nothing is BROKEN by leaving them blank,
+      # it just means no one receives a real email yet.
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USERNAME
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: FROM_EMAIL
+        sync: false
+
+  - type: web
+    name: delivery-sync-frontend
+    # Static site, not a second Docker web service: frontend/Dockerfile
+    # builds via `npm run build` and serves the output with nginx —
+    # exactly what Render's own static-site hosting does natively, for
+    # FREE, on a global CDN, with no spin-down (static sites have no
+    # compute plan to even choose — see Render's Blueprint spec). Using
+    # Render's own docker-based web service here instead would mean
+    # paying for and running a second always-on container just to serve
+    # files nginx was already serving statically — real, avoidable cost
+    # for identical behavior, not a meaningful tradeoff either way.
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      # Same placeholder-then-fix-it story as ALLOWED_ORIGINS above, in
+      # the other direction — the frontend needs the BACKEND's real
+      # URL, which also only exists after that service's first deploy.
+      # Vite bakes this in at BUILD time (see frontend/Dockerfile's own
+      # comment on why), so fixing this after the backend's first
+      # deploy means triggering a rebuild here, not just an env var
+      # change taking effect on its own.
+      - key: VITE_API_BASE_URL
+        value: https://CHANGE-ME-after-first-deploy.onrender.com
+    routes:
+      # SPA fallback — the same job frontend/nginx.conf's `try_files
+      # $uri $uri/ /index.html` does locally: any path that isn't a
+      # real built file (a client-side route the React app itself
+      # handles) falls back to index.html instead of a bare 404.
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      # Same long-cache policy as nginx.conf's /assets/ block — Vite
+      # fingerprints built filenames with a content hash, so a NEW
+      # deploy naturally gets new filenames instead of needing this
+      # cache invalidated.
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable

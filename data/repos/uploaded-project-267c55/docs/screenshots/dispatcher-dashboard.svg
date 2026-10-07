@@ -1,0 +1,109 @@
+<svg viewBox="0 0 1200 700" xmlns="http://www.w3.org/2000/svg" font-family="Inter, -apple-system, sans-serif">
+  <rect width="1200" height="700" fill="#0b0e14"/>
+
+  <!-- Sidebar -->
+  <rect x="0" y="0" width="200" height="700" fill="#141821"/>
+  <text x="24" y="44" fill="#f2a93b" font-family="'Space Grotesk', sans-serif" font-size="18" font-weight="700">Delivery Sync</text>
+  <rect x="16" y="80" width="168" height="34" rx="6" fill="#f2a93b"/>
+  <text x="30" y="102" fill="#14100a" font-size="13" font-weight="600">Dashboard</text>
+  <text x="30" y="144" fill="#8b93a3" font-size="13">Unassigned Orders</text>
+  <text x="30" y="180" fill="#8b93a3" font-size="13">Fleet</text>
+  <text x="30" y="216" fill="#8b93a3" font-size="13">Analytics</text>
+  <text x="30" y="252" fill="#8b93a3" font-size="13">Support</text>
+  <text x="30" y="288" fill="#8b93a3" font-size="13">Organization</text>
+  <text x="30" y="324" fill="#8b93a3" font-size="13">Settings</text>
+
+  <!-- Top bar -->
+  <text x="224" y="46" fill="#e8eaed" font-size="20" font-weight="700">Dispatcher Dashboard</text>
+  <circle cx="1152" cy="38" r="16" fill="#1b212c" stroke="#2a3140"/>
+  <text x="1152" y="43" text-anchor="middle" fill="#8b93a3" font-size="12">JD</text>
+
+  <!-- Stat cards -->
+  <g>
+    <rect x="224" y="72" width="176" height="86" rx="10" fill="#141821" stroke="#2a3140"/>
+    <rect x="224" y="72" width="176" height="3" fill="#f2a93b"/>
+    <text x="242" y="102" fill="#8b93a3" font-size="12">Active Deliveries</text>
+    <text x="242" y="138" fill="#e8eaed" font-size="26" font-weight="700">47</text>
+  </g>
+  <g>
+    <rect x="412" y="72" width="176" height="86" rx="10" fill="#141821" stroke="#2a3140"/>
+    <rect x="412" y="72" width="176" height="3" fill="#f2a93b"/>
+    <text x="430" y="102" fill="#8b93a3" font-size="12">Delivered Today</text>
+    <text x="430" y="138" fill="#3dd68c" font-size="26" font-weight="700">128</text>
+  </g>
+  <g>
+    <rect x="600" y="72" width="176" height="86" rx="10" fill="#141821" stroke="#2a3140"/>
+    <rect x="600" y="72" width="176" height="3" fill="#f2a93b"/>
+    <text x="618" y="102" fill="#8b93a3" font-size="12">Overdue</text>
+    <text x="618" y="138" fill="#ef5350" font-size="26" font-weight="700">3</text>
+  </g>
+  <g>
+    <rect x="788" y="72" width="176" height="86" rx="10" fill="#141821" stroke="#2a3140"/>
+    <rect x="788" y="72" width="176" height="3" fill="#f2a93b"/>
+    <text x="806" y="102" fill="#8b93a3" font-size="12">Agents Online</text>
+    <text x="806" y="138" fill="#4fa3f7" font-size="26" font-weight="700">12 / 15</text>
+  </g>
+
+  <!-- Table -->
+  <rect x="224" y="182" width="952" height="470" rx="10" fill="#141821" stroke="#2a3140"/>
+
+  <!-- table header -->
+  <text x="248" y="216" fill="#8b93a3" font-size="11" font-weight="600">ORDER ID</text>
+  <text x="378" y="216" fill="#8b93a3" font-size="11" font-weight="600">CUSTOMER</text>
+  <text x="548" y="216" fill="#8b93a3" font-size="11" font-weight="600">AGENT</text>
+  <text x="678" y="216" fill="#8b93a3" font-size="11" font-weight="600">ZONE</text>
+  <text x="758" y="216" fill="#8b93a3" font-size="11" font-weight="600">STATUS</text>
+  <text x="878" y="216" fill="#8b93a3" font-size="11" font-weight="600">EXPECTED BY</text>
+  <text x="1030" y="216" fill="#8b93a3" font-size="11" font-weight="600">REASSIGN</text>
+  <line x1="240" y1="230" x2="1160" y2="230" stroke="#2a3140"/>
+
+  <!-- rows -->
+  <g font-size="13" fill="#e8eaed">
+    <!-- row 1 -->
+    <text x="248" y="262" font-family="'JetBrains Mono', monospace" font-size="12">ORD-4471</text>
+    <text x="378" y="262" fill="#8b93a3" font-size="12">priya@example.com</text>
+    <text x="548" y="262">Rahul K.</text>
+    <text x="678" y="262" fill="#8b93a3">Zone B</text>
+    <rect x="758" y="250" width="92" height="20" rx="10" fill="rgba(79,163,247,0.15)"/>
+    <text x="804" y="264" text-anchor="middle" fill="#4fa3f7" font-size="11">Picked Up</text>
+    <text x="878" y="262" fill="#8b93a3" font-size="12">Today, 4:30 PM</text>
+    <rect x="1020" y="250" width="100" height="22" rx="5" fill="#0f1319" stroke="#384056"/>
+    <text x="1070" y="265" text-anchor="middle" fill="#8b93a3" font-size="10">↻ Reassign...</text>
+
+    <!-- row 2 -->
+    <line x1="240" y1="280" x2="1160" y2="280" stroke="#1b212c"/>
+    <text x="248" y="312" font-family="'JetBrains Mono', monospace" font-size="12">ORD-4472</text>
+    <text x="378" y="312" fill="#8b93a3" font-size="12">arjun@example.com</text>
+    <text x="548" y="312">Meena S.</text>
+    <text x="678" y="312" fill="#8b93a3">Zone A</text>
+    <rect x="758" y="300" width="110" height="20" rx="10" fill="rgba(242,169,59,0.15)"/>
+    <text x="813" y="314" text-anchor="middle" fill="#f2a93b" font-size="11">Out for Delivery</text>
+    <text x="878" y="312" fill="#8b93a3" font-size="12">Today, 5:00 PM</text>
+    <rect x="1020" y="300" width="100" height="22" rx="5" fill="#0f1319" stroke="#384056"/>
+    <text x="1070" y="315" text-anchor="middle" fill="#8b93a3" font-size="10">↻ Reassign...</text>
+
+    <!-- row 3 -->
+    <line x1="240" y1="330" x2="1160" y2="330" stroke="#1b212c"/>
+    <text x="248" y="362" font-family="'JetBrains Mono', monospace" font-size="12">ORD-4473</text>
+    <text x="378" y="362" fill="#8b93a3" font-size="12">divya@example.com</text>
+    <text x="548" y="362">—</text>
+    <text x="678" y="362" fill="#8b93a3">Zone C</text>
+    <rect x="758" y="350" width="80" height="20" rx="10" fill="rgba(139,147,163,0.15)"/>
+    <text x="798" y="364" text-anchor="middle" fill="#8b93a3" font-size="11">Pending</text>
+    <text x="878" y="362" fill="#ef5350" font-size="12" font-weight="600">Overdue</text>
+    <text x="1070" y="364" text-anchor="middle" fill="#5a6272" font-size="10">—</text>
+
+    <!-- row 4 -->
+    <line x1="240" y1="380" x2="1160" y2="380" stroke="#1b212c"/>
+    <text x="248" y="412" font-family="'JetBrains Mono', monospace" font-size="12">ORD-4474</text>
+    <text x="378" y="412" fill="#8b93a3" font-size="12">kabir@example.com</text>
+    <text x="548" y="412">Rahul K.</text>
+    <text x="678" y="412" fill="#8b93a3">Zone B</text>
+    <rect x="758" y="400" width="96" height="20" rx="10" fill="rgba(61,214,140,0.15)"/>
+    <text x="806" y="414" text-anchor="middle" fill="#3dd68c" font-size="11">Delivered</text>
+    <text x="878" y="412" fill="#8b93a3" font-size="12">Today, 2:15 PM</text>
+    <text x="1070" y="414" text-anchor="middle" fill="#5a6272" font-size="10">—</text>
+  </g>
+
+  <text x="700" y="680" text-anchor="middle" fill="#384056" font-size="11">Illustrative mockup — not a real screenshot</text>
+</svg>

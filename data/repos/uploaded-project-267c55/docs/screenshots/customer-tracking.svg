@@ -1,0 +1,42 @@
+<svg viewBox="0 0 700 640" xmlns="http://www.w3.org/2000/svg" font-family="Inter, -apple-system, sans-serif">
+  <rect width="700" height="640" fill="#0b0e14"/>
+
+  <text x="350" y="50" text-anchor="middle" fill="#f2a93b" font-family="'Space Grotesk', sans-serif" font-size="20" font-weight="700">Delivery Sync</text>
+
+  <!-- Card -->
+  <rect x="110" y="90" width="480" height="500" rx="14" fill="#141821" stroke="#2a3140"/>
+
+  <text x="350" y="140" text-anchor="middle" fill="#e8eaed" font-family="'JetBrains Mono', monospace" font-size="20" font-weight="700">ORD-4471</text>
+  <rect x="290" y="156" width="120" height="26" rx="13" fill="rgba(242,169,59,0.15)"/>
+  <text x="350" y="173" text-anchor="middle" fill="#f2a93b" font-size="12" font-weight="600">Out for Delivery</text>
+
+  <!-- Live map placeholder -->
+  <rect x="140" y="202" width="420" height="140" rx="10" fill="#0f1319" stroke="#2a3140"/>
+  <circle cx="230" cy="272" r="6" fill="#f2a93b"/>
+  <circle cx="410" cy="272" r="6" fill="#3dd68c"/>
+  <path d="M230 272 Q 320 220 410 272" stroke="#4fa3f7" stroke-width="2" fill="none" stroke-dasharray="4,4"/>
+  <text x="350" y="326" text-anchor="middle" fill="#5a6272" font-size="11">Live agent location</text>
+
+  <!-- Timeline -->
+  <text x="150" y="374" fill="#8b93a3" font-size="12" font-weight="600">ORDER TIMELINE</text>
+
+  <line x1="160" y1="392" x2="160" y2="540" stroke="#2a3140" stroke-width="2"/>
+
+  <circle cx="160" cy="398" r="5" fill="#3dd68c"/>
+  <text x="180" y="396" fill="#e8eaed" font-size="13" font-weight="600">Order Confirmed</text>
+  <text x="180" y="414" fill="#5a6272" font-size="11">Today, 10:02 AM</text>
+
+  <circle cx="160" cy="440" r="5" fill="#3dd68c"/>
+  <text x="180" y="438" fill="#e8eaed" font-size="13" font-weight="600">Picked Up</text>
+  <text x="180" y="456" fill="#5a6272" font-size="11">Today, 1:14 PM</text>
+
+  <circle cx="160" cy="482" r="5" fill="#f2a93b"/>
+  <text x="180" y="480" fill="#e8eaed" font-size="13" font-weight="600">Out for Delivery</text>
+  <text x="180" y="498" fill="#5a6272" font-size="11">Today, 4:02 PM</text>
+
+  <circle cx="160" cy="524" r="5" fill="#384056"/>
+  <text x="180" y="522" fill="#5a6272" font-size="13">Delivered</text>
+  <text x="180" y="540" fill="#5a6272" font-size="11">Pending</text>
+
+  <text x="350" y="616" text-anchor="middle" fill="#384056" font-size="11">Illustrative mockup — not a real screenshot</text>
+</svg>

@@ -1,0 +1,104 @@
+{
+  "run_id": "0d3e1fa18e58",
+  "llm": "mock",
+  "status": "no_fix",
+  "answer": "**Analysis**\n(mock LLM) Retrieval-only result. Most relevant files: backend/app/models/delivery.py, docs/FEATURE_LOG.md, frontend/src/components/SignupPage.jsx, backend/tests/test_route_analytics.py, backend/app/models/order.py\n\n**Affected:** `backend/app/models/delivery.py`\n\n_No patch generated._ edit is missing file/search",
+  "intent": "debug",
+  "analysis": {
+    "need_more": false,
+    "follow_up_queries": [],
+    "answer": "(mock LLM) Retrieval-only result. Most relevant files: backend/app/models/delivery.py, docs/FEATURE_LOG.md, frontend/src/components/SignupPage.jsx, backend/tests/test_route_analytics.py, backend/app/models/order.py",
+    "root_cause": "",
+    "affected_file": "backend/app/models/delivery.py",
+    "affected_function": ""
+  },
+  "patch": null,
+  "diff": "",
+  "test_before": null,
+  "test_after": null,
+  "steps": [
+    {
+      "node": "analyze_query",
+      "message": "intent=debug; queries=['Why am I getting a 500 error when creating a delivery?', 'getting', 'error', 'creating', 'delivery']"
+    },
+    {
+      "node": "retrieve",
+      "message": "retrieved backend/app/models/delivery.py::DeliveryPriority, docs/FEATURE_LOG.md::docs/FEATURE_LOG.md:1231, frontend/src/components/SignupPage.jsx::SignupPage, docs/FEATURE_LOG.md::docs/FEATURE_LOG.md:2641, docs/FEATURE_LOG.md::docs/FEATURE_LOG.md:1261, backend/tests/test_route_analytics.py::test_no_deviation_when_staying_on_course, backend/app/models/order.py::backend/app/models/order.py, backend/app/services/returns_workflow.py::handle_return_pickup_completion",
+      "count": 25
+    },
+    {
+      "node": "analyze",
+      "message": "analysis done: backend/app/models/delivery.py::n/a"
+    },
+    {
+      "node": "generate_fix",
+      "message": "no valid patch: edit is missing file/search"
+    },
+    {
+      "node": "respond",
+      "message": "status=no_fix"
+    }
+  ],
+  "sources": [
+    {
+      "file": "backend/app/models/delivery.py",
+      "lines": "32-46",
+      "symbol": "DeliveryPriority"
+    },
+    {
+      "file": "docs/FEATURE_LOG.md",
+      "lines": "1231-1270",
+      "symbol": "docs/FEATURE_LOG.md:1231"
+    },
+    {
+      "file": "frontend/src/components/SignupPage.jsx",
+      "lines": "23-240",
+      "symbol": "SignupPage"
+    },
+    {
+      "file": "docs/FEATURE_LOG.md",
+      "lines": "2641-2680",
+      "symbol": "docs/FEATURE_LOG.md:2641"
+    },
+    {
+      "file": "docs/FEATURE_LOG.md",
+      "lines": "1261-1300",
+      "symbol": "docs/FEATURE_LOG.md:1261"
+    },
+    {
+      "file": "backend/tests/test_route_analytics.py",
+      "lines": "124-132",
+      "symbol": "test_no_deviation_when_staying_on_course"
+    },
+    {
+      "file": "backend/app/models/order.py",
+      "lines": "1-24",
+      "symbol": "backend/app/models/order.py"
+    },
+    {
+      "file": "backend/app/services/returns_workflow.py",
+      "lines": "63-137",
+      "symbol": "handle_return_pickup_completion"
+    },
+    {
+      "file": "backend/app/services/monitoring.py",
+      "lines": "57-72",
+      "symbol": "record_error"
+    },
+    {
+      "file": "mobile/src/services/api.js",
+      "lines": "237-240",
+      "symbol": "isNetworkError"
+    },
+    {
+      "file": "backend/app/models/monitoring.py",
+      "lines": "66-75",
+      "symbol": "ErrorLogOut"
+    },
+    {
+      "file": "frontend/src/services/api.js",
+      "lines": "2674-2680",
+      "symbol": "fetchErrorLogs"
+    }
+  ]
+}

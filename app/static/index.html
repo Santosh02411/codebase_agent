@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Codebase Desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/tokens.css">
+<link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+<header class="top">
+  <svg class="logo" viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="6" fill="var(--hl)"/><path d="M6 8h9M6 12h12M6 16h6" stroke="var(--ink)" stroke-width="2" stroke-linecap="round"/></svg>
+  <h1>Codebase Desk</h1>
+  <span id="model" class="chip"></span>
+</header>
+
+<main class="desk">
+  <aside class="rail" aria-label="Project">
+    <h2>Project</h2>
+    <select id="repo" aria-label="Project"></select>
+    <p class="note" id="meta"></p>
+    <div class="row"><button class="btn ghost" id="reindex">Re-index</button><button class="btn ghost" id="tests">Run tests</button></div>
+
+    <details class="add" id="add">
+      <summary>Add a project</summary>
+      <label class="drop" id="drop"><input type="file" id="zip" accept=".zip" hidden><span id="dropText">Drop a .zip here or click to choose</span></label>
+      <div class="row"><input type="text" id="zname" placeholder="Name (optional)" aria-label="Project name"><button class="btn" id="upload">Upload</button></div>
+      <div class="row"><input type="text" id="url" placeholder="https://github.com/owner/repo" aria-label="GitHub URL"><button class="btn ghost" id="clone">Clone</button></div>
+      <p class="note" id="addmsg" role="status"></p>
+    </details>
+
+    <h2>Files</h2>
+    <input type="text" id="filter" placeholder="Filter files" aria-label="Filter files">
+    <div id="tree" class="tree"></div>
+  </aside>
+
+  <section class="main">
+    <form class="composer card" id="form">
+      <textarea id="q" rows="3" aria-label="Your question"></textarea>
+      <div class="bar">
+        <div class="seg" id="seg" data-i="1" role="group" aria-label="Mode">
+          <i class="thumb"></i>
+          <button type="button" data-m="search" aria-pressed="false">Search code</button>
+          <button type="button" data-m="chat" aria-pressed="true">Ask</button>
+          <button type="button" data-m="debug" aria-pressed="false">Find bug and fix</button>
+        </div>
+        <button class="btn send" id="go" type="submit">Send <kbd>Ctrl ⏎</kbd></button>
+      </div>
+    </form>
+    <div id="out" aria-live="polite"></div>
+  </section>
+
+  <aside class="tcol" aria-label="Agent activity">
+    <h2>What the agent did</h2>
+    <ol class="trace" id="trace"><li class="idle">Nothing yet. Send a question and the steps appear here.</li></ol>
+    <h2>Code it read</h2>
+    <div id="srcs" class="srcs"><p class="note">Nothing yet.</p></div>
+  </aside>
+</main>
+
+<dialog id="viewer">
+  <header><b id="vtitle"></b><form method="dialog"><button class="btn ghost" aria-label="Close file">Close</button></form></header>
+  <div id="vcode" class="code"></div>
+</dialog>
+<div id="toasts" aria-live="polite"></div>
+<script type="module" src="/static/js/main.js"></script>
+</body>
+</html>

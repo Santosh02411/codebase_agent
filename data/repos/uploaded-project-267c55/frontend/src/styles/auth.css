@@ -1,0 +1,299 @@
+/* Login/Signup styling — matches the dark "Fleet Ops Console" theme
+   (theme.css). This file only adds auth-page-specific layout; colors and
+   fonts are pulled from the CSS variables defined globally in theme.css. */
+
+.auth-page-wrapper {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--bg-page);
+  position: relative;
+  overflow: hidden;
+}
+
+/* A soft light source in the corner plus a faint dashed "route" arcing
+   across the page — the one deliberate signature flourish on this
+   product's most-seen screen, evoking a delivery route without
+   literally drawing a map. Both are pure CSS background layers behind
+   the card, so every auth screen (login, signup, forgot/reset
+   password) picks this up automatically with zero JSX changes. */
+.auth-page-wrapper::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 900px 600px at 12% -10%, var(--accent-glow), transparent 60%),
+    radial-gradient(ellipse 700px 500px at 100% 110%, var(--accent-glow), transparent 55%);
+  pointer-events: none;
+}
+
+.auth-page-wrapper::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(120deg, transparent 46%, var(--border-color-light) 46.4%, var(--border-color-light) 46.6%, transparent 47%),
+    linear-gradient(120deg, transparent 58%, var(--border-color-light) 58.4%, var(--border-color-light) 58.6%, transparent 59%);
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.auth-page-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.auth-wordmark {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.02em;
+  margin-bottom: 22px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.auth-wordmark::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-glow);
+}
+
+.auth-theme-toggle {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color-light);
+  color: var(--text-primary);
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-family: var(--font-body);
+  cursor: pointer;
+  z-index: 2;
+}
+
+.auth-theme-toggle:hover {
+  border-color: var(--accent);
+}
+
+.auth-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  padding: 40px;
+  border-radius: var(--radius-lg);
+  width: 100%;
+  max-width: 380px;
+  box-shadow: var(--shadow-lg);
+  animation: fadeSlideUp 0.35s ease;
+}
+
+.auth-wordmark {
+  animation: fadeIn 0.4s ease;
+}
+
+.auth-card h2 {
+  margin: 0 0 24px 0;
+  font-size: 20px;
+  color: var(--text-primary);
+  position: relative;
+  padding-bottom: 14px;
+}
+
+.auth-card h2::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  width: 32px;
+  border-radius: 2px;
+  background-color: var(--accent);
+}
+
+.auth-field {
+  margin-bottom: 16px;
+}
+
+.auth-field label {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+}
+
+.auth-field input,
+.auth-field select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: var(--font-body);
+  box-sizing: border-box;
+}
+
+.auth-field input:focus,
+.auth-field select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.auth-error {
+  color: var(--danger);
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.auth-submit-btn {
+  width: 100%;
+  padding: 12px;
+  background-color: var(--accent);
+  color: var(--accent-text-on);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 14.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.auth-submit-btn {
+  transition: background-color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+}
+
+.auth-submit-btn:hover:not(:disabled) {
+  background-color: var(--accent-hover);
+  box-shadow: 0 4px 14px var(--accent-glow);
+}
+
+.auth-submit-btn:active:not(:disabled) {
+  transform: translateY(1px) scale(0.99);
+}
+
+.auth-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.auth-switch-text {
+  margin-top: 20px;
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--text-secondary);
+}
+
+.auth-switch-link {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 0;
+}
+
+/* ---------- "Try the Demo" ---------- */
+
+.auth-demo-btn {
+  width: 100%;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--accent-text-on);
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  box-shadow: 0 4px 14px var(--accent-glow);
+  margin-top: 4px;
+}
+
+.auth-demo-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px var(--accent-glow);
+}
+
+.auth-demo-btn:active:not(:disabled) {
+  transform: translateY(1px) scale(0.99);
+}
+
+.auth-demo-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.auth-demo-hint {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  margin-top: 8px;
+  margin-bottom: 4px;
+}
+
+/* ---------- "or" divider + Sign in with Google ---------- */
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background-color: var(--border-color);
+}
+
+.auth-google-btn {
+  width: 100%;
+  padding: 10px 12px;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+}
+
+.auth-google-btn:hover:not(:disabled) {
+  background-color: var(--bg-surface-elevated);
+  border-color: var(--border-color-light);
+  box-shadow: var(--shadow-sm);
+}
+
+.auth-google-btn:active:not(:disabled) {
+  transform: translateY(1px) scale(0.99);
+}
+
+.auth-google-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

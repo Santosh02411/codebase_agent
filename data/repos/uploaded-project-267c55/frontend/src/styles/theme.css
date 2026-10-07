@@ -1,0 +1,922 @@
+/* ============================================================
+   Delivery Sync — "Fleet Ops Console" Design System
+   A dark, data-dense, logistics-operations aesthetic — built to
+   feel like a real dispatch/tracking product, not a default
+   browser-styled CRUD app.
+
+   Fonts (Space Grotesk, Inter, JetBrains Mono) are loaded via a
+   <link> tag in index.html rather than @import here, since a <link>
+   lets the browser fetch them in parallel with this stylesheet
+   instead of blocking on a nested request.
+   ============================================================ */
+
+:root {
+  /* Backgrounds */
+  --bg-page: #0b0e14;
+  --bg-surface: #141821;
+  --bg-surface-elevated: #1b212c;
+  --bg-input: #0f1319;
+
+  /* Borders */
+  --border-color: #2a3140;
+  --border-color-light: #384056;
+
+  /* Text */
+  --text-primary: #e8eaed;
+  --text-secondary: #8b93a3;
+  --text-muted: #5a6272;
+
+  /* Brand / accent */
+  --accent: #f2a93b;
+  --accent-hover: #d6941f;
+  --accent-text-on: #14100a;
+  --accent-glow: rgba(242, 169, 59, 0.18);
+
+  /* Status colors */
+  --status-picked-up: #4fa3f7;
+  --status-out-for-delivery: #f2a93b;
+  --status-delivered: #3dd68c;
+  --status-failed: #ef5350;
+
+  /* Semantic */
+  --success: #3dd68c;
+  --danger: #ef5350;
+  --info: #4fa3f7;
+
+  /* Typography */
+  --font-display: 'Space Grotesk', sans-serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Spacing / radius */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+
+  /* Depth — soft, low-opacity shadows tuned for a near-black surface.
+     Dark UIs need shadows built from pure black at low opacity rather
+     than the gray drop-shadows that work on white; a gray shadow on a
+     dark card just looks like a mistake. */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.24), 0 1px 1px rgba(0, 0, 0, 0.18);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.32), 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.24);
+}
+
+/* ---------- Light theme overrides ----------
+   Applied via <html data-theme="light">, set by ThemeContext. Every
+   component uses the SAME variable names in both themes — only the
+   values change here, so no component needs theme-specific logic. */
+
+html[data-theme="light"] {
+  --bg-page: #f4f5f7;
+  --bg-surface: #ffffff;
+  --bg-surface-elevated: #ffffff;
+  --bg-input: #ffffff;
+
+  --border-color: #e1e4e8;
+  --border-color-light: #ccd1d9;
+
+  --text-primary: #1a1d23;
+  --text-secondary: #545b6b;
+  --text-muted: #7c8494;
+
+  --accent: #c97a10;
+  --accent-hover: #a8660c;
+  --accent-text-on: #ffffff;
+
+  /* Status/semantic colors are deliberately darkened versions of the dark
+     theme's colors — the dark theme's colors were tuned to be bright
+     against a near-black background, but at that same brightness they
+     fail contrast against a white background. These keep the same hue
+     (so status meaning stays recognizable) at a darkness that stays
+     readable on white. */
+  --status-picked-up: #1565c0;
+  --status-out-for-delivery: #b26a00;
+  --status-delivered: #1e7e4f;
+  --status-failed: #c62828;
+
+  --success: #1e7e4f;
+  --danger: #c62828;
+  --info: #1565c0;
+
+  /* Light theme shadows: real gray, much softer — black-based shadows
+     that work on near-black look muddy on white. */
+  --shadow-sm: 0 1px 2px rgba(20, 24, 33, 0.06), 0 1px 1px rgba(20, 24, 33, 0.04);
+  --shadow-md: 0 4px 14px rgba(20, 24, 33, 0.08), 0 1px 3px rgba(20, 24, 33, 0.06);
+  --shadow-lg: 0 16px 36px rgba(20, 24, 33, 0.12), 0 2px 8px rgba(20, 24, 33, 0.06);
+  --accent-glow: rgba(201, 122, 16, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  /* A very faint dot-grid on the page background — a nod to a
+     dispatch console's map grid, subtle enough to never compete with
+     real content (opacity is baked into the dot color itself, not a
+     layered overlay, so it can't accidentally darken text). */
+  background-color: var(--bg-page);
+  background-image: radial-gradient(circle, var(--border-color) 1px, transparent 1px);
+  background-size: 28px 28px;
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+html[data-theme="light"] body {
+  background-image: radial-gradient(circle, #e6e8ec 1px, transparent 1px);
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  margin: 0;
+}
+
+::selection {
+  background-color: var(--accent);
+  color: var(--accent-text-on);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Thin, theme-matched scrollbars — the default OS scrollbar is the one
+   remaining thing on this page that never picked up the theme. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: var(--border-color-light);
+  border-radius: 20px;
+  border: 2px solid var(--bg-page);
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* ---------- Layout shell ---------- */
+
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  background-color: var(--bg-surface);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  padding: 20px 0;
+  box-shadow: var(--shadow-md);
+  position: relative;
+  z-index: 10;
+}
+
+.sidebar-brand {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--accent);
+  padding: 0 20px 24px 20px;
+  letter-spacing: 0.3px;
+}
+
+.sidebar-section-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  padding: 0 20px;
+  margin-bottom: 8px;
+}
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.sidebar-link:hover {
+  background-color: var(--bg-surface-elevated);
+  color: var(--text-primary);
+}
+
+.sidebar-link.active {
+  color: var(--accent);
+  border-left-color: var(--accent);
+  background-color: var(--bg-surface-elevated);
+  font-weight: 600;
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  padding: 16px 20px 0 20px;
+  border-top: 1px solid var(--border-color);
+}
+
+.sidebar-user {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+.sidebar-user strong {
+  color: var(--text-primary);
+  display: block;
+  font-size: 13.5px;
+}
+
+.sidebar-action-btn {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.sidebar-action-btn:last-child {
+  margin-bottom: 0;
+}
+
+/* ---------- Customer notifications dropdown ----------
+   Positioned as a floating panel anchored near the sidebar's
+   "Notifications" trigger button, with a click-to-close backdrop —
+   NOT an inline block in the page's normal document flow. It used to
+   render as a plain <div className="card"> sitting wherever it fell
+   in main-content's JSX order, which meant it could appear stacked
+   awkwardly against whatever view (Orders/Shop/Addresses/etc.) was
+   currently active instead of popping up near the button that opened
+   it. Fixed positioning + a backdrop is the standard, professional
+   pattern for this (same idea the mobile .sidebar-overlay already
+   uses elsewhere in this file). */
+.notifications-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  background-color: transparent; /* invisible click-catcher, not a dimming backdrop — the panel itself should feel like a lightweight dropdown, not a modal */
+}
+
+.notifications-panel {
+  position: fixed;
+  bottom: 84px;
+  left: 236px;
+  z-index: 401;
+  width: 380px;
+  max-width: calc(100vw - 40px);
+  max-height: min(480px, 70vh);
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.notifications-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.notifications-panel-title {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.notifications-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.notifications-panel-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 4px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.notifications-panel-close:hover {
+  color: var(--text-primary);
+  background-color: var(--bg-surface-elevated);
+}
+
+.notifications-panel-body {
+  overflow-y: auto;
+  padding: 6px 14px 10px 14px;
+}
+
+.notifications-panel-empty {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  padding: 14px 0;
+}
+
+@media (max-width: 768px) {
+  .notifications-panel {
+    left: 20px;
+    right: 20px;
+    bottom: 20px;
+    width: auto;
+    max-width: none;
+  }
+}
+
+/* Hidden on desktop — only shown at mobile widths below */
+.mobile-topbar {
+  display: none;
+}
+
+.main-content {
+  flex-grow: 1;
+  padding: 28px 32px;
+  overflow-x: hidden;
+}
+
+.page-title {
+  font-size: 22px;
+  margin-bottom: 20px;
+  position: relative;
+  padding-left: 14px;
+}
+
+.page-title::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 3px;
+  bottom: 3px;
+  width: 4px;
+  border-radius: 2px;
+  background-color: var(--accent);
+}
+
+/* ---------- Mobile responsive layout ----------
+   Below 768px, the always-visible desktop sidebar becomes an off-canvas
+   drawer: hidden by default, toggled by a hamburger button in a slim top
+   bar, closed by tapping the dark overlay behind it or picking a nav
+   link. Every other component in this app already uses flex-wrap and
+   relative units in its own inline styles, so forms/filters/cards reflow
+   naturally without needing per-component media queries — this block
+   handles the one part that genuinely needed structural changes: the
+   navigation shell itself.
+
+   Note: .sidebar-overlay has no "display" rule at all — Sidebar.jsx only
+   renders it in the DOM in the first place when the drawer is open, so
+   there's nothing to toggle via CSS; it just needs its positioning. */
+@media (max-width: 768px) {
+  .app-shell {
+    flex-direction: column;
+  }
+
+  .mobile-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background-color: var(--bg-surface);
+    border-bottom: 1px solid var(--border-color);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .mobile-topbar-brand {
+    font-family: var(--font-display);
+    font-weight: 700;
+    color: var(--accent);
+    font-size: 16px;
+  }
+
+  .mobile-menu-btn {
+    background: none;
+    border: 1px solid var(--border-color-light);
+    color: var(--text-primary);
+    font-size: 18px;
+    padding: 4px 12px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: 240px;
+    max-width: 80vw;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    z-index: 200;
+    padding-top: 60px; /* clears the fixed mobile top bar */
+  }
+
+  .sidebar.mobile-open {
+    transform: translateX(0);
+  }
+
+  .sidebar-overlay {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 150;
+  }
+
+  .main-content {
+    padding: 16px;
+  }
+
+  .page-title {
+    font-size: 19px;
+  }
+}
+
+/* ---------- Connectivity banner ---------- */
+
+.connectivity-banner {
+  padding: 8px 16px;
+  text-align: center;
+  font-weight: 600;
+  font-size: 13px;
+  color: white;
+}
+
+.connectivity-banner.online {
+  background-color: var(--success);
+  color: #06261a;
+}
+
+.connectivity-banner.offline {
+  background-color: var(--danger);
+}
+
+/* ---------- Cards ---------- */
+
+.card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.card-clickable {
+  cursor: pointer;
+}
+
+.card-clickable:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.stat-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 14px 18px;
+  min-width: 130px;
+  border-top: 3px solid var(--accent);
+  box-shadow: var(--shadow-sm);
+  animation: fadeSlideUp 0.3s ease both;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.stat-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.stat-card-value {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-card-label {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 2px;
+}
+
+/* ---------- Buttons ---------- */
+
+.btn {
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color-light);
+  background-color: var(--bg-surface-elevated);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: border-color 0.12s ease, background-color 0.12s ease, transform 0.08s ease, box-shadow 0.12s ease;
+}
+
+.btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background-color: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text-on);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: var(--accent-hover);
+  border-color: var(--accent-hover);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.btn-danger-outline {
+  background: none;
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  font-size: 12px;
+  padding: 4px 10px;
+}
+
+.btn-info-outline {
+  background: none;
+  border: 1px solid var(--info);
+  color: var(--info);
+  font-size: 12px;
+  padding: 4px 10px;
+}
+
+.btn-sm {
+  font-size: 12px;
+  padding: 4px 10px;
+}
+
+/* ---------- Password field with show/hide toggle ---------- */
+
+.password-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-input-wrap input {
+  width: 100%;
+  padding-right: 38px !important;
+}
+
+.password-toggle-btn {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.password-toggle-btn:hover {
+  color: var(--accent);
+  background-color: var(--accent-glow);
+}
+
+.password-toggle-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.password-toggle-btn svg {
+  display: block;
+}
+
+/* ---------- Micro-interactions & motion ---------- */
+
+@keyframes fadeSlideUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes popIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.card {
+  transition: box-shadow 0.18s ease, transform 0.18s ease, border-color 0.18s ease;
+}
+
+.data-table tbody tr {
+  transition: background-color 0.12s ease;
+}
+
+.data-table tbody tr.row-animate {
+  animation: fadeIn 0.25s ease;
+}
+
+.timeline-entry {
+  animation: fadeSlideUp 0.3s ease both;
+}
+
+.data-table tbody tr:hover {
+  background-color: var(--bg-surface-elevated);
+}
+
+a, button, .btn, select, input {
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+/* ---------- Inputs ---------- */
+
+.input, select.input {
+  font-family: var(--font-body);
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-color-light);
+  color: var(--text-primary);
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 13.5px;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.input:focus, select.input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.input::placeholder {
+  color: var(--text-muted);
+}
+
+.field-label {
+  display: block;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ---------- Status badges ---------- */
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11.5px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.status-badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: currentColor;
+  flex-shrink: 0;
+}
+
+.status-badge.picked_up { background-color: rgba(79,163,247,0.15); color: var(--status-picked-up); }
+.status-badge.out_for_delivery { background-color: rgba(242,169,59,0.15); color: var(--status-out-for-delivery); }
+.status-badge.delivered { background-color: rgba(61,214,140,0.15); color: var(--status-delivered); }
+.status-badge.failed_attempt { background-color: rgba(239,83,80,0.15); color: var(--status-failed); }
+.status-badge.cancelled { background-color: rgba(148,158,171,0.15); color: var(--text-secondary); }
+.status-badge.pending { background-color: rgba(155,109,247,0.15); color: #9b6df7; }
+
+/* A delivery actively in motion gets a gently pulsing dot — a small,
+   deliberate signal that this status is "live" right now, not just a
+   label. Kept to exactly the two in-transit states so it reads as
+   meaningful rather than decorative. */
+.status-badge.picked_up::before,
+.status-badge.out_for_delivery::before {
+  animation: status-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes status-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 currentColor; }
+  50% { opacity: 0.55; box-shadow: 0 0 0 3px transparent; }
+}
+
+.sync-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.sync-badge.synced { background-color: rgba(61,214,140,0.15); color: var(--success); }
+.sync-badge.pending { background-color: rgba(242,169,59,0.15); color: var(--status-out-for-delivery); }
+
+/* ---------- Table ---------- */
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.data-table th {
+  text-align: left;
+  padding: 10px 12px;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.data-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-color);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.data-table tbody tr {
+  cursor: pointer;
+  transition: background-color 0.1s ease;
+}
+
+.data-table tbody tr:hover {
+  background-color: var(--bg-surface-elevated);
+}
+
+/* ---------- Empty states ----------
+   "An empty screen is an invitation to act" — a plain gray sentence
+   floating in a lot of blank space reads as a bug, not a deliberate
+   state. This gives every empty list/queue in the app the same quiet,
+   centered treatment instead of each screen inventing its own. */
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 48px 24px;
+  color: var(--text-secondary);
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.empty-state-icon {
+  font-size: 28px;
+  margin-bottom: 10px;
+  opacity: 0.7;
+}
+
+.empty-state-title {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.empty-state-body {
+  font-size: 13px;
+  max-width: 340px;
+  line-height: 1.5;
+}
+
+/* ---------- Delivery card (agent view) ---------- */
+
+.delivery-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  animation: fadeSlideUp 0.3s ease;
+}
+
+.delivery-card:hover {
+  border-color: var(--border-color-light);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.delivery-card-order-id {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* ---------- Pagination ---------- */
+
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* ---------- Modal ---------- */
+
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: rgba(0,0,0,0.6);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: modal-fade-in 0.15s ease;
+}
+
+.modal-card {
+  background-color: var(--bg-surface-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 24px;
+  width: 100%;
+  max-width: 480px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+  animation: modal-rise-in 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modal-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modal-rise-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}

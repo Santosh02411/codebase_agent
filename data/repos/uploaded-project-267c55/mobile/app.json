@@ -1,0 +1,67 @@
+{
+  "expo": {
+    "name": "Delivery Sync Agent",
+    "slug": "delivery-sync-agent",
+    "version": "1.0.0",
+    "scheme": "deliverysync",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "backgroundColor": "#0b0e14"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.deliverysync.agent",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Delivery Sync shares your location with dispatch while you have an active delivery, so customers can see your live position on their tracking page.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Delivery Sync shares your location with dispatch even while the app is in the background, so a customer's live tracking map keeps working while you're driving with the phone locked.",
+        "UIBackgroundModes": ["location"],
+        "NSCameraUsageDescription": "Delivery Sync uses the camera to scan package QR codes and to take a delivery photo as proof of delivery.",
+        "NSPhotoLibraryUsageDescription": "Delivery Sync lets you choose an existing photo as proof of delivery."
+      }
+    },
+    "android": {
+      "package": "com.deliverysync.agent",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "CAMERA"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Delivery Sync shares your location with dispatch even while the app is in the background, so a customer's live tracking map keeps working while you're driving with the phone locked.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#f2a93b"
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Delivery Sync uses the camera to scan package QR codes and to take a delivery photo as proof of delivery."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Delivery Sync lets you choose an existing photo as proof of delivery."
+        }
+      ]
+    ]
+  }
+}

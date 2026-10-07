@@ -1,0 +1,78 @@
+# Full-stack local deployment: Postgres + FastAPI backend + the built
+# React frontend served by nginx. Run with:
+#
+#   docker compose up --build
+#
+# Then visit http://localhost:3000. This is the "real" production-
+# shaped setup — a real database instead of a SQLite file, the frontend
+# served as static files instead of Vite's dev server, and the backend
+# running in ENVIRONMENT=production (see main.py / services/auth.py for
+# what that actually changes: /docs disabled, CORS locked to just this
+# frontend, and a hard startup failure instead of a warning if
+# JWT_SECRET_KEY is left unset).
+#
+# For everyday development, plain `uvicorn main:app --reload` +
+# `npm run dev` (see each folder's README) is still faster — instant
+# reload on every file save, which a rebuilt Docker image can't match.
+# This compose file is for running the whole thing the way it'll
+# actually be deployed, not for iterating on code.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: delivery_sync
+      POSTGRES_PASSWORD: delivery_sync_local_only
+      POSTGRES_DB: delivery_sync
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U delivery_sync"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ENVIRONMENT: production
+      DATABASE_URL: postgresql://delivery_sync:delivery_sync_local_only@db:5432/delivery_sync
+      # A real random key is required in production (see
+      # services/auth.py) — this default is fine ONLY because it's
+      # obviously a placeholder and this whole file is a local/demo
+      # setup; replace it before deploying anywhere real, the same way
+      # you would any other secret.
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-please-change-this-to-a-real-random-secret}
+      ALLOWED_ORIGINS: http://localhost:3000
+      FRONTEND_URL: http://localhost:3000
+      # Every optional integration (SMTP, Twilio, Razorpay, VAPID,
+      # Google Maps) still follows the same "real if set, safe
+      # fallback otherwise" pattern in Docker as it does locally — set
+      # these here (or in a .env file docker compose reads
+      # automatically) to turn any of them on for real.
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # The browser needs a URL IT can reach — "backend" (the
+        # service name above) only resolves inside docker's internal
+        # network, not from the browser on your machine. localhost:8000
+        # works because the backend service's port is published above.
+        VITE_API_BASE_URL: http://localhost:8000
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+
+volumes:
+  postgres_data:
