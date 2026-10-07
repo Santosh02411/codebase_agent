@@ -2,10 +2,14 @@ from __future__ import annotations
 import json
 import uuid
 
+from pathlib import Path
+
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import patching
+from . import features, github_pr, patching
 from .agent.graph import run_agent
 from .agent.nodes import AgentRuntime
 from .agent.state import new_state
@@ -13,9 +17,12 @@ from .agent.tools import RepoTools
 from .config import get_settings
 from .llm import get_llm
 from .services import RepoService
+from .utils import safe_path
 
-app = FastAPI(title="AI Codebase Intelligence & Debugging Agent", version="0.1.0")
+app = FastAPI(title="AI Codebase Intelligence & Debugging Agent", version="0.4.0")
 _service: RepoService | None = None
+STATIC = Path(__file__).parent / "static"
+app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
 def service() -> RepoService:
@@ -79,6 +86,11 @@ def _run(body: AskIn, allow_fix: bool, allow_verify: bool = True) -> dict:
     return out
 
 
+@app.get("/", include_in_schema=False)
+def ui():
+    return FileResponse(STATIC / "index.html")
+
+
 @app.get("/health")
 def health():
     s = get_settings()
@@ -115,6 +127,19 @@ def reindex(repo_id: str):
 @app.get("/repositories/{repo_id}/tree")
 def tree(repo_id: str):
     return {"files": _repo(repo_id)[2].tree}
+
+
+@app.get("/repositories/{repo_id}/file")
+def read_file(repo_id: str, path: str):
+    """Return one source file (for the UI code viewer). Paths are confined to the repository."""
+    _, root, index = _repo(repo_id)
+    try:
+        text = RepoTools(root, index).read_file(path)
+    except UnicodeDecodeError:
+        raise HTTPException(400, "this file is not text, so it can't be shown")
+    except (ValueError, OSError):
+        raise HTTPException(400, f"can't read {path}")
+    return {"path": path, "text": text[:200_000], "truncated": len(text) > 200_000}
 
 
 @app.post("/search")
@@ -164,3 +189,99 @@ def get_run(run_id: str):
     if not p.is_file() or not run_id.isalnum():
         raise HTTPException(404, "unknown run")
     return json.loads(p.read_text())
+
+
+# ---- v4: architecture, review, code changes, test generation, pull requests ----------------------
+class RepoOnly(BaseModel):
+    repo_id: str
+    provider: str | None = None
+
+
+class ReviewIn(RepoOnly):
+    path: str | None = None
+
+
+class ChangeIn(RepoOnly):
+    request: str
+    verify: bool = True
+
+
+class TestsIn(RepoOnly):
+    target: str  # file path, e.g. services/eta.py
+    verify: bool = True
+
+
+class ChangesIn(BaseModel):
+    repo_id: str
+    edits: list[dict] = []
+    new_files: list[dict] = []
+
+
+class PRIn(BaseModel):
+    repo_id: str
+    files: dict[str, str]  # path -> full new content (the `final_files` of a /change response)
+    title: str
+    body: str = ""
+    confirm: bool = False
+
+
+def _feature(repo_id: str, provider: str | None, fn):
+    s = get_settings()
+    _, root, index = _repo(repo_id)
+    try:
+        return fn(get_llm(provider), RepoTools(root, index, s.test_timeout), s)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(502, f"agent failed: {type(e).__name__}: {e}")
+
+
+@app.post("/architecture")
+def architecture(body: RepoOnly):
+    """Explain how the project is structured and how its parts connect."""
+    return _feature(body.repo_id, body.provider, lambda llm, t, s: features.architecture(llm, t))
+
+
+@app.post("/review")
+def review(body: ReviewIn):
+    """Code review of one file or the whole project: automatic checks plus AI findings."""
+    return _feature(body.repo_id, body.provider, lambda llm, t, s: features.review(llm, t, body.path))
+
+
+@app.post("/change")
+def change(body: ChangeIn):
+    """Generate code / modify several files for a request; tests run before and after in a sandbox copy."""
+    return _feature(body.repo_id, body.provider, lambda llm, t, s: features.change_code(llm, t, s, body.request, body.verify))
+
+
+@app.post("/generate-tests")
+def generate_tests(body: TestsIn):
+    """Write a new test file for a source file and run it in the sandbox."""
+    return _feature(body.repo_id, body.provider, lambda llm, t, s: features.generate_tests(llm, t, s, body.target, body.verify))
+
+
+@app.post("/apply-changes")
+def apply_changes(body: ChangesIn):
+    """Apply an approved multi-file change to the working copy, then re-index."""
+    _, root, _ = _repo(body.repo_id)
+    try:
+        files = patching.apply_changes(root, body.edits, body.new_files)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"files": files, "index": service().reindex(body.repo_id)}
+
+
+@app.post("/create-pr")
+def create_pr(body: PRIn):
+    """Open a GitHub pull request with an approved change. Needs GITHUB_TOKEN and confirm=true."""
+    if not body.confirm:
+        raise HTTPException(400, "confirm must be true: this creates a branch and a pull request on GitHub")
+    meta, root, _ = _repo(body.repo_id)
+    try:
+        for path in body.files:
+            safe_path(root, path)
+        return github_pr.create_pr(meta["source"], get_settings().github_token, body.files, body.title, body.body)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(502, f"GitHub request failed: {type(e).__name__}: {e}")

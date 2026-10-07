@@ -1,25 +1,35 @@
-# Python virtual environment
-.venv/
+# --- virtual environments (never commit these) ---
 venv/
+.venv/
 env/
 ENV/
+.env/
+*/venv/
+*/.venv/
 
-# Python cache
-__pycache__/
-*.py[cod]
-*.pyo
-
-# Environment variables
+# --- secrets ---
 .env
 .env.*
+!.env.example
 
-# IDE
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+
+# --- app runtime data (indexes, cloned repos, run logs) ---
+data/
+
+# --- editors / OS ---
 .vscode/
 .idea/
-
-# Logs
-*.log
-
-# OS files
 .DS_Store
 Thumbs.db
+*.log

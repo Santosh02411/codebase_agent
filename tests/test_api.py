@@ -54,3 +54,18 @@ def test_local_paths_disabled_by_default(tmp_path, monkeypatch):
     import app.main as m
     m._service = None
     assert TestClient(m.app).post("/repositories", json={"source": str(FIXTURE)}).status_code == 400
+
+
+def test_file_endpoint_reads_and_blocks_traversal(client):
+    c, _ = client
+    rid = _add(c)
+    r = c.get(f"/repositories/{rid}/file", params={"path": "auth.py"})
+    assert r.status_code == 200 and "def " in r.json()["text"]
+    assert c.get(f"/repositories/{rid}/file", params={"path": "../../etc/passwd"}).status_code == 400
+    assert c.get(f"/repositories/{rid}/file", params={"path": "missing.py"}).status_code == 400
+
+
+def test_ui_assets_served(client):
+    c, _ = client
+    assert c.get("/").status_code == 200
+    assert c.get("/static/js/main.js").status_code == 200

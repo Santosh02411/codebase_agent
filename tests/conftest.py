@@ -5,6 +5,13 @@ import pytest
 FIXTURE = Path(__file__).parent / "fixtures" / "delivery_sync"
 
 
+@pytest.fixture(autouse=True)
+def _isolated_env(monkeypatch):
+    # a developer's real .env (e.g. LLM_PROVIDER=gemini) must never leak into tests
+    monkeypatch.setenv("LLM_PROVIDER", "mock")
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "hash")
+
+
 @pytest.fixture
 def repo(tmp_path):
     dest = tmp_path / "delivery_sync"

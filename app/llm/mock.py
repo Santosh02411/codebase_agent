@@ -3,7 +3,7 @@ import re
 from .base import LLM
 
 _DEBUG = re.compile(r"\b(error|bug|fail|failing|failed|exception|traceback|crash|500|fix|broken|wrong)\b", re.I)
-_STOP = {"where", "what", "how", "why", "does", "this", "that", "with", "from", "when", "which", "the", "are", "after"}
+_STOP = {"where", "what", "how", "why", "does", "this", "that", "with", "from", "when", "which", "the", "are", "after", "walk", "through", "request", "flow", "getting", "explain", "tell", "about", "there", "error"}
 
 
 class MockLLM(LLM):
@@ -33,4 +33,6 @@ class MockLLM(LLM):
             }
         if task == "generate_fix":
             return {"file": "", "search": "", "replace": "", "explanation": "mock LLM cannot generate patches"}
+        if task in ("generate_change", "generate_tests"):
+            return {"edits": [], "new_files": [], "explanation": "mock LLM cannot generate code"}
         return {}

@@ -1,4 +1,5 @@
 from __future__ import annotations
+import io
 import os
 import re
 import shutil
@@ -65,16 +66,26 @@ def clone_repo(url: str, dest: Path) -> None:
 def copy_local(src: Path, dest: Path) -> None:
     if not src.is_dir():
         raise ValueError(f"not a directory: {src}")
+    src, dest = src.resolve(), dest.resolve()
     if dest.exists():
         shutil.rmtree(dest)
-    shutil.copytree(src, dest, ignore=shutil.ignore_patterns(*SKIP_DIRS))
+    # If the destination lives inside the source (e.g. you add this very project and DATA_DIR=./data),
+    # copying would recurse into its own output forever. Skip every folder on the path to dest.
+    guarded = {a for a in dest.parents if src in a.parents}
+
+    def ignore(directory: str, names: list[str]) -> set[str]:
+        skip = {n for n in names if n in SKIP_DIRS}
+        skip |= {n for n in names if (Path(directory) / n).resolve() in guarded}
+        return skip
+
+    shutil.copytree(src, dest, ignore=ignore)
 
 
 def extract_zip(fileobj, dest: Path) -> None:
     if dest.exists():
         shutil.rmtree(dest)
     dest.mkdir(parents=True)
-    with zipfile.ZipFile(fileobj) as z:
+    with zipfile.ZipFile(io.BytesIO(fileobj.read())) as z:
         for m in z.infolist():
             target = (dest / m.filename).resolve()
             if dest.resolve() not in target.parents and target != dest.resolve():

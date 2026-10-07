@@ -36,13 +36,14 @@ Design rules: the original repo is never modified until the user approves a patc
 | Search | BM25 + dense vectors + RRF, lexical reranker | cross-encoder planned |
 | Storage | v1 JSON + pickle → PostgreSQL + pgvector (Phase 7) | |
 | Infra | Docker, docker-compose, GitHub Actions | |
-| Frontend | Next.js + TypeScript (Phase 7) | |
+| Frontend | v3: single-file web UI served by FastAPI at `/`; Next.js + TypeScript optional upgrade (Phase 7) | |
 | Observability | LangSmith (Phase 8) | |
 
 ## 4. Folder structure
 ```
 app/
-  main.py            FastAPI routes
+  main.py            FastAPI routes (+ serves UI)
+  static/index.html  web UI
   config.py          env settings
   services.py        repo registry + index cache
   ingest.py          clone / copy / unzip, file scan, index build

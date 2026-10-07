@@ -37,3 +37,48 @@ def make_diff(root: Path, edit: dict) -> str:
     new = old.replace(edit["search"], edit.get("replace", ""), 1)
     return "".join(difflib.unified_diff(old.splitlines(True), new.splitlines(True),
                                         f"a/{edit['file']}", f"b/{edit['file']}"))
+
+
+# ---- multi-file changes: several edits + brand-new files, validated together before anything is written ----
+def plan_changes(root: Path, edits: list[dict] | None, new_files: list[dict] | None) -> dict[str, tuple[str, str]]:
+    """Dry run. Returns {path: (old_text, new_text)} or raises ValueError. Edits to one file apply in order."""
+    files: dict[str, list[str]] = {}
+    for e in edits or []:
+        f = e.get("file")
+        if not f or not e.get("search"):
+            raise ValueError("edit is missing file/search")
+        p = safe_path(root, f)
+        if f not in files:
+            if not p.is_file():
+                raise ValueError(f"file not found: {f}")
+            old = p.read_text(encoding="utf-8")
+            files[f] = [old, old]
+        n = files[f][1].count(e["search"])
+        if n != 1:
+            raise ValueError(f"`search` text in {f} must match exactly once (found {n})")
+        files[f][1] = files[f][1].replace(e["search"], e.get("replace", ""), 1)
+    for nf in new_files or []:
+        f = nf.get("path")
+        if not f or not isinstance(nf.get("content"), str):
+            raise ValueError("new file needs a path and content")
+        if f in files or safe_path(root, f).exists():
+            raise ValueError(f"file already exists: {f}")
+        files[f] = ["", nf["content"]]
+    if not files:
+        raise ValueError("no changes proposed")
+    return {k: (v[0], v[1]) for k, v in files.items()}
+
+
+def apply_changes(root: Path, edits: list[dict] | None, new_files: list[dict] | None) -> list[str]:
+    plan = plan_changes(root, edits, new_files)
+    for f, (_, new) in plan.items():
+        p = safe_path(root, f)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(new, encoding="utf-8")
+    return list(plan)
+
+
+def changes_diff(plan: dict[str, tuple[str, str]]) -> str:
+    return "".join("".join(difflib.unified_diff(old.splitlines(True), new.splitlines(True),
+                                                f"a/{f}" if old else "/dev/null", f"b/{f}"))
+                   for f, (old, new) in plan.items())

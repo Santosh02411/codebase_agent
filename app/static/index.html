@@ -41,11 +41,15 @@
     <form class="composer card" id="form">
       <textarea id="q" rows="3" aria-label="Your question"></textarea>
       <div class="bar">
-        <div class="seg" id="seg" data-i="1" role="group" aria-label="Mode">
+        <div class="seg" id="seg" role="group" aria-label="Mode">
           <i class="thumb"></i>
-          <button type="button" data-m="search" aria-pressed="false">Search code</button>
           <button type="button" data-m="chat" aria-pressed="true">Ask</button>
+          <button type="button" data-m="search" aria-pressed="false">Search code</button>
+          <button type="button" data-m="architecture" aria-pressed="false">Architecture</button>
+          <button type="button" data-m="review" aria-pressed="false">Review code</button>
           <button type="button" data-m="debug" aria-pressed="false">Find bug and fix</button>
+          <button type="button" data-m="change" aria-pressed="false">Change code</button>
+          <button type="button" data-m="tests" aria-pressed="false">Write tests</button>
         </div>
         <button class="btn send" id="go" type="submit">Send <kbd>Ctrl ⏎</kbd></button>
       </div>

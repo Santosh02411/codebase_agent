@@ -21,6 +21,7 @@ class Chunk:
     text: str
     language: str
     calls: list[str] = field(default_factory=list)
+    route: str = ""  # e.g. "POST /deliveries" for HTTP handlers
 
 
 def _calls(node: ast.AST) -> list[str]:
@@ -40,6 +41,33 @@ def _span(node) -> tuple[int, int]:
     return start, node.end_lineno
 
 
+_HTTP = {"get", "post", "put", "patch", "delete"}
+
+
+def _router_prefixes(tree: ast.Module) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for n in tree.body:
+        if isinstance(n, ast.Assign) and isinstance(n.value, ast.Call):
+            f = n.value.func
+            name = f.id if isinstance(f, ast.Name) else getattr(f, "attr", "")
+            if name in ("APIRouter", "Blueprint", "Router"):
+                for kw in n.value.keywords:
+                    if kw.arg in ("prefix", "url_prefix") and isinstance(kw.value, ast.Constant):
+                        for t in n.targets:
+                            if isinstance(t, ast.Name):
+                                out[t.id] = str(kw.value.value)
+    return out
+
+
+def _route(node, prefixes: dict[str, str]) -> str:
+    for d in getattr(node, "decorator_list", []):
+        if (isinstance(d, ast.Call) and isinstance(d.func, ast.Attribute) and d.func.attr in _HTTP
+                and d.args and isinstance(d.args[0], ast.Constant) and isinstance(d.args[0].value, str)):
+            owner = d.func.value.id if isinstance(d.func.value, ast.Name) else ""
+            return f"{d.func.attr.upper()} {prefixes.get(owner, '')}{d.args[0].value}"
+    return ""
+
+
 def chunk_python(path: str, text: str) -> list[Chunk]:
     """AST-aware chunking: one chunk per function / method / class header / module-level code."""
     try:
@@ -51,13 +79,15 @@ def chunk_python(path: str, text: str) -> list[Chunk]:
     covered: set[int] = set()
     funcs = (ast.FunctionDef, ast.AsyncFunctionDef)
 
-    def emit(kind, name, qual, s, e, calls=None):
-        chunks.append(Chunk(-1, path, kind, name, qual, s, e, "\n".join(lines[s - 1 : e]), "python", calls or []))
+    prefixes = _router_prefixes(tree)
+
+    def emit(kind, name, qual, s, e, calls=None, route=""):
+        chunks.append(Chunk(-1, path, kind, name, qual, s, e, "\n".join(lines[s - 1 : e]), "python", calls or [], route))
 
     for node in tree.body:
         if isinstance(node, funcs):
             s, e = _span(node)
-            emit("function", node.name, node.name, s, e, _calls(node))
+            emit("function", node.name, node.name, s, e, _calls(node), _route(node, prefixes))
             covered.update(range(s, e + 1))
         elif isinstance(node, ast.ClassDef):
             s, e = _span(node)

@@ -20,7 +20,7 @@ class CodeIndex:
         self.chunks, self.emb, self.tree, self.deps, self.imports = chunks, embeddings, tree, deps, imports
         self.embedder_name = embedder_name
         self.embedder = embedder or get_embedder(embedder_name)
-        self.tokens = [tokenize(f"{c.file} {c.qualname} {c.text}") for c in chunks]
+        self.tokens = [tokenize(f"{c.file} {c.qualname} {c.route} {c.text}") for c in chunks]
         self.token_sets = [set(t) for t in self.tokens]
         self.bm25 = BM25(self.tokens)
         self.by_name: dict[str, list[Chunk]] = defaultdict(list)
@@ -32,7 +32,7 @@ class CodeIndex:
     def build(cls, chunks, tree, deps, imports, embedder) -> "CodeIndex":
         for i, c in enumerate(chunks):
             c.id = i
-        texts = [f"{c.file}\n{c.qualname}\n{c.text}" for c in chunks]
+        texts = [f"{c.file}\n{c.qualname}\n{c.route}\n{c.text}" for c in chunks]
         emb = embedder.embed(texts) if texts else np.zeros((0, 1), dtype=np.float32)
         return cls(chunks, emb, tree, deps, imports, embedder.name, embedder)
 

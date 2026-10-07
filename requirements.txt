@@ -8,4 +8,5 @@ langchain-core>=0.3
 openai>=1.30
 google-genai>=0.3
 pytest>=8.0
+python-dotenv>=1.0
 httpx>=0.27

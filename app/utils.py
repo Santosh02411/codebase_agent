@@ -14,6 +14,8 @@ _SUFFIXES = ("ation", "ate", "ing", "ed", "es", "s")
 
 def stem(tok: str) -> str:
     """Tiny suffix stemmer so `authentication` matches `authenticate_user`."""
+    if tok.endswith("ies") and len(tok) > 5:
+        return tok[:-3] + "y"
     for suf in _SUFFIXES:
         if tok.endswith(suf) and len(tok) - len(suf) >= 4:
             return tok[: -len(suf)]

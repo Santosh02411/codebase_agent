@@ -46,10 +46,10 @@ kbd{font:500 11px var(--mono);opacity:.65;margin-left:6px}
 .composer textarea{width:100%;border:0;resize:vertical;background:transparent;font-size:17px;line-height:1.5;min-height:84px}
 .composer textarea:focus-visible{outline:0}.composer:focus-within{border-color:var(--pen)}
 .bar{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
-.seg{position:relative;display:grid;grid-template-columns:repeat(3,auto);background:var(--paper);border:1px solid var(--line);border-radius:99px;padding:3px}
+.seg{position:relative;display:flex;flex-wrap:wrap;gap:2px;background:var(--paper);border:1px solid var(--line);border-radius:20px;padding:3px}
 .seg button{position:relative;z-index:1;border:0;background:none;padding:6px 14px;border-radius:99px;cursor:pointer;font-weight:500;color:var(--muted);transition:color .25s}
 .seg button[aria-pressed=true]{color:var(--paper)}
-.thumb{position:absolute;top:3px;bottom:3px;left:3px;width:var(--w,33%);background:var(--ink);border-radius:99px;transition:transform .35s var(--ease),width .35s var(--ease)}
+.thumb{position:absolute;top:0;left:0;width:var(--w,60px);height:var(--h,30px);background:var(--ink);border-radius:99px;transition:transform .35s var(--ease),width .35s var(--ease)}
 
 /* ---------- empty state & results ---------- */
 .empty h2{font-size:clamp(24px,3.4vw,34px);font-weight:800;letter-spacing:-.02em;color:var(--ink);margin:28px 0 14px;max-width:18ch;line-height:1.15}
@@ -63,11 +63,15 @@ pre{margin:8px 0;padding:10px 12px;background:var(--paper);border:1px solid var(
 .diff .add{background:var(--addbg);border-color:var(--good)}.diff .del{background:var(--delbg);border-color:var(--bad)}.diff .hunk{color:var(--muted)}
 .verdict{display:flex;gap:10px;align-items:center;font-weight:600}.verdict i{font-style:normal;color:var(--muted)}
 .pill{padding:1px 10px;border-radius:99px;font-size:13px;border:1px solid}
-.pill.passed{color:var(--good)}.pill.failed,.pill.error,.pill.timeout{color:var(--bad)}.pill.no_tests,.pill.none{color:var(--muted)}
+.pill.passed,.pill.verified{color:var(--good)}.pill.failed,.pill.error,.pill.timeout{color:var(--bad)}.pill.no_tests,.pill.none,.pill.unverified{color:var(--muted)}
 .hit{padding:12px 0;border-top:1px solid var(--line)}.hit:first-of-type{border-top:0;padding-top:0}
 .link{border:0;background:none;padding:0;font:500 13px var(--mono);color:var(--pen);cursor:pointer;text-align:left;word-break:break-all}.link:hover{text-decoration:underline}
 .card.err{border-color:var(--bad)}.card.err h3{color:var(--bad)}
 
+.sev{display:inline-block;min-width:62px;text-align:center;font-size:12px;font-weight:600;padding:0 8px;border-radius:99px;border:1px solid;margin-right:6px}
+.sev.high{color:var(--bad)}.sev.medium{background:var(--hl);color:var(--ink);border-color:transparent}.sev.low{color:var(--muted)}
+.files{margin:0 0 8px;padding:0;list-style:none;font:12.5px var(--mono)}.files li::before{content:"+ ";color:var(--good)}
+.hit p{margin:4px 0 0;max-width:72ch}
 /* ---------- trace: the one orchestrated moment ---------- */
 .trace{list-style:none;margin:0;padding:0 0 0 12px;border-left:2px solid var(--line)}
 .trace li{position:relative;margin:0 0 14px;padding-left:14px;font-size:13.5px;animation:in .4s var(--ease) both;animation-delay:min(calc(var(--i,0)*140ms),2s)}
@@ -99,5 +103,5 @@ dialog header{display:flex;justify-content:space-between;align-items:center;padd
 
 /* ---------- responsive & motion preferences ---------- */
 @media(max-width:1100px){.desk{grid-template-columns:240px minmax(0,1fr)}.tcol{grid-column:1/-1;border:0;border-top:1px solid var(--line)}}
-@media(max-width:720px){.seg{width:100%;grid-template-columns:repeat(3,1fr)}.seg button{padding:6px 4px;font-size:13px}.desk{grid-template-columns:minmax(0,1fr)}.rail{border:0;border-bottom:1px solid var(--line)}.tree{max-height:200px}}
+@media(max-width:720px){.seg button{padding:6px 10px;font-size:13px}.desk{grid-template-columns:minmax(0,1fr)}.rail{border:0;border-bottom:1px solid var(--line)}.tree{max-height:200px}}
 @media(prefers-reduced-motion:reduce){*,*::before{animation-duration:.01ms!important;animation-delay:0s!important;transition-duration:.01ms!important}}

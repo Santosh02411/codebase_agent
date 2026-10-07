@@ -9,6 +9,10 @@ import { openFile } from "./viewer.js";
 const S = { mode: "chat", repo: "", files: [], repos: [], busy: false };
 const HINT = {
   search: "Find code, for example: where is the user's password checked?",
+  architecture: "Optional: press Send to get an overview of how the project is structured.",
+  review: "Optional: a file to review, like services/eta.py. Leave empty to review the project.",
+  change: "Describe the change, for example: add a /health endpoint and a test for it.",
+  tests: "Which file should get tests? For example: services/eta.py",
   chat: "Ask about the project, for example: how does authentication work?",
   debug: "Describe the bug, or paste an error message or stack trace.",
 };
@@ -72,13 +76,15 @@ $("#tests").onclick = async () => {
 };
 
 /* ---- mode switch (sliding thumb) ---- */
+const OPTIONAL = ["architecture", "review"];
 function setMode(m) {
   S.mode = m;
   const seg = $("#seg");
   seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.m === m));
   const on = seg.querySelector(`[aria-pressed=true]`), thumb = seg.querySelector(".thumb");
   thumb.style.setProperty("--w", `${on.offsetWidth}px`);
-  thumb.style.transform = `translateX(${on.offsetLeft - 3}px)`;
+  thumb.style.setProperty("--h", `${on.offsetHeight}px`);
+  thumb.style.transform = `translate(${on.offsetLeft}px, ${on.offsetTop}px)`;
   $("#q").placeholder = HINT[m];
 }
 $("#seg").onclick = (e) => { const b = e.target.closest("button"); if (b) setMode(b.dataset.m); };
@@ -91,15 +97,30 @@ async function send(e) {
   if (S.busy) return;
   const q = $("#q").value.trim();
   if (!S.repo) return toast("Add and pick a project first.", "err");
-  if (!q) return toast("Type a question or paste an error.", "err");
+  if (!q && !OPTIONAL.includes(S.mode)) return toast("Type a question or paste an error.", "err");
   busy(true); view.clear();
-  trace.pending(S.mode === "debug" ? "Analysing, patching and running tests. This can take a minute." : "Reading your code…");
+  trace.pending(["debug", "change", "tests"].includes(S.mode) ? "Working and running tests. This can take a minute." : "Reading your code…");
   try {
     if (S.mode === "search") {
       const hits = await post("/search", { repo_id: S.repo, query: q, k: 6 });
       trace.show([{ node: "search", message: `${hits.length} matches` }]);
       trace.sources(hits.map((h) => ({ file: h.file, lines: `${h.start}-${h.end}`, symbol: h.qualname })), open);
       view.search(hits, open);
+    } else if (S.mode === "architecture") {
+      const r = await post("/architecture", { repo_id: S.repo });
+      trace.show(r.steps); trace.sources([], open); view.architecture(r);
+    } else if (S.mode === "review") {
+      const r = await post("/review", { repo_id: S.repo, path: q || null });
+      trace.show(r.steps); trace.sources([], open); view.review(r, open);
+    } else if (S.mode === "change" || S.mode === "tests") {
+      const r = S.mode === "tests" ? await post("/generate-tests", { repo_id: S.repo, target: q }) : await post("/change", { repo_id: S.repo, request: q });
+      const meta = S.repos.find((x) => x.id === S.repo);
+      trace.show(r.steps); trace.sources(r.sources, open);
+      view.changes(r, {
+        canPr: /^https:\/\/github\.com\//.test(meta?.source || ""),
+        apply: () => post("/apply-changes", { repo_id: S.repo, edits: r.edits, new_files: r.new_files }),
+        pr: () => post("/create-pr", { repo_id: S.repo, files: r.final_files, title: (r.explanation || "AI-generated change").split("\n")[0].slice(0, 70), body: r.explanation, confirm: true }),
+      });
     } else {
       const r = await post(S.mode === "debug" ? "/debug" : "/chat", { repo_id: S.repo, question: q });
       trace.show(r.steps); trace.sources(r.sources, open);

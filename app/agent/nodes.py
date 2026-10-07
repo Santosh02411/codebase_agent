@@ -13,7 +13,8 @@ SYSTEM = ("You are a senior software engineer analysing a code repository. "
 def format_context(chunks: list[dict], max_chars: int = 3500) -> str:
     parts = []
     for c in chunks:
-        parts.append(f"### {c['file']}:{c['start']}-{c['end']} ({c['qualname']}) [{c['via']}]\n```\n{c['text'][:max_chars]}\n```")
+        route = f" route={c['route']}" if c.get("route") else ""
+        parts.append(f"### {c['file']}:{c['start']}-{c['end']} ({c['qualname']}){route} [{c['via']}]\n```\n{c['text'][:max_chars]}\n```")
     return "\n\n".join(parts)
 
 

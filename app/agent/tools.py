@@ -9,7 +9,7 @@ from ..utils import safe_path
 
 def chunk_dict(c, score: float | None = None, via: str = "search") -> dict:
     d = {"id": c.id, "file": c.file, "kind": c.kind, "name": c.name, "qualname": c.qualname,
-         "start": c.start, "end": c.end, "text": c.text, "via": via}
+         "start": c.start, "end": c.end, "text": c.text, "via": via, "route": c.route}
     if score is not None:
         d["score"] = round(float(score), 3)
     return d

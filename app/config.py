@@ -2,6 +2,13 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+try:  # load .env automatically (real environment variables win)
+    from dotenv import load_dotenv
+
+    load_dotenv(override=False)
+except ImportError:  # python-dotenv is optional
+    pass
+
 
 class Settings:
     """Runtime configuration, read from environment variables (see .env.example)."""
@@ -17,6 +24,7 @@ class Settings:
         self.max_agent_steps = int(os.getenv("MAX_AGENT_STEPS", "3"))
         self.max_fix_attempts = int(os.getenv("MAX_FIX_ATTEMPTS", "2"))
         self.test_timeout = int(os.getenv("TEST_TIMEOUT", "120"))
+        self.github_token = os.getenv("GITHUB_TOKEN", "")  # only needed for pull requests
         self.max_context_chunks = int(os.getenv("MAX_CONTEXT_CHUNKS", "12"))
 
 
