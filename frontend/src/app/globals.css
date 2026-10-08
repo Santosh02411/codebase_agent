@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 222 16% 10%;
+    --foreground: 214 20% 88%;
+    --panel: 222 16% 12%;
+    --primary: 213 94% 62%;
+    --primary-foreground: 222 30% 8%;
+    --secondary: 222 14% 18%;
+    --secondary-foreground: 214 20% 88%;
+    --muted: 222 14% 16%;
+    --muted-foreground: 215 12% 60%;
+    --accent: 222 14% 21%;
+    --accent-foreground: 214 20% 94%;
+    --destructive: 0 72% 56%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 142 62% 48%;
+    --warning: 38 92% 56%;
+    --border: 222 14% 22%;
+    --input: 222 14% 24%;
+    --ring: 213 94% 62%;
+    --radius: 0.5rem;
+  }
+  * { @apply border-border; }
+  html, body { height: 100%; overflow: hidden; }
+  body { @apply bg-background text-foreground font-sans antialiased text-[13px]; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 8px; border: 2px solid transparent; background-clip: content-box; }
+  ::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground) / 0.5); background-clip: content-box; border: 2px solid transparent; }
+}
+
+/* Editor decorations (see MonacoEditor.tsx) */
+.reveal-line { background: hsl(var(--primary) / 0.18); }
+.reveal-glyph { background: hsl(var(--primary)); width: 3px !important; margin-left: 3px; }
+
+/* Markdown rendered inside chat messages */
+.prose-chat { line-height: 1.55; word-break: break-word; }
+.prose-chat > * + * { margin-top: 0.6rem; }
+.prose-chat h1, .prose-chat h2, .prose-chat h3 { font-weight: 600; margin-top: 0.9rem; }
+.prose-chat h1 { font-size: 1.05rem; } .prose-chat h2 { font-size: 1rem; } .prose-chat h3 { font-size: 0.95rem; }
+.prose-chat ul { list-style: disc; padding-left: 1.2rem; }
+.prose-chat ol { list-style: decimal; padding-left: 1.2rem; }
+.prose-chat a { color: hsl(var(--primary)); text-decoration: underline; }
+.prose-chat code:not(pre code) { background: hsl(var(--secondary)); padding: 0.1rem 0.35rem; border-radius: 4px; font-family: theme(fontFamily.mono); font-size: 0.92em; }
+.prose-chat table { border-collapse: collapse; font-size: 0.92em; }
+.prose-chat th, .prose-chat td { border: 1px solid hsl(var(--border)); padding: 0.25rem 0.5rem; }
+.prose-chat blockquote { border-left: 3px solid hsl(var(--border)); padding-left: 0.75rem; color: hsl(var(--muted-foreground)); }

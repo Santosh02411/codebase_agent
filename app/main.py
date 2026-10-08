@@ -1,15 +1,22 @@
 from __future__ import annotations
+import itertools
 import json
+import os
+import queue
+import threading
+import time
 import uuid
 
 from pathlib import Path
+from typing import Literal
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import features, github_pr, patching
+from . import features, github_pr, gitops, instrument, patching, terminal, textsearch
 from .agent.graph import run_agent
 from .agent.nodes import AgentRuntime
 from .agent.state import new_state
@@ -22,6 +29,9 @@ from .utils import safe_path
 app = FastAPI(title="AI Codebase Intelligence & Debugging Agent", version="0.4.0")
 _service: RepoService | None = None
 STATIC = Path(__file__).parent / "static"
+# The Next.js IDE (frontend/) runs on another port in development, so allow it to call this API.
+app.add_middleware(CORSMiddleware, allow_methods=["*"], allow_headers=["*"],
+                   allow_origins=[o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",") if o.strip()])
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
@@ -64,12 +74,15 @@ def _repo(repo_id: str):
         raise HTTPException(404, f"unknown repository: {repo_id}")
 
 
-def _run(body: AskIn, allow_fix: bool, allow_verify: bool = True) -> dict:
+def _run(body: AskIn, allow_fix: bool, allow_verify: bool = True, emit=None) -> dict:
     s = get_settings()
     _, root, index = _repo(body.repo_id)
     try:
         llm = get_llm(body.provider)
-        rt = AgentRuntime(llm, RepoTools(root, index, s.test_timeout), s)
+        tools = RepoTools(root, index, s.test_timeout)
+        rt = AgentRuntime(llm, tools, s)
+        if emit:
+            instrument.instrument(rt, llm, tools, emit)
         st = run_agent(rt, new_state(body.question, body.repo_id, allow_fix, allow_verify))
     except ValueError as e:
         raise HTTPException(400, str(e))
@@ -94,7 +107,9 @@ def ui():
 @app.get("/health")
 def health():
     s = get_settings()
-    return {"status": "ok", "llm_provider": s.llm_provider, "embedding_provider": s.embedding_provider}
+    return {"status": "ok", "llm_provider": s.llm_provider, "embedding_provider": s.embedding_provider,
+            "llm_model": s.llm_model, "github_configured": bool(s.github_token), "git_available": gitops.available(),
+            "allow_local_paths": s.allow_local_paths}
 
 
 @app.post("/repositories")
@@ -132,9 +147,9 @@ def tree(repo_id: str):
 @app.get("/repositories/{repo_id}/file")
 def read_file(repo_id: str, path: str):
     """Return one source file (for the UI code viewer). Paths are confined to the repository."""
-    _, root, index = _repo(repo_id)
+    _, root, _ = _repo(repo_id)
     try:
-        text = RepoTools(root, index).read_file(path)
+        text = safe_path(root, path).read_text(encoding="utf-8")  # exact text, incl. trailing newline
     except UnicodeDecodeError:
         raise HTTPException(400, "this file is not text, so it can't be shown")
     except (ValueError, OSError):
@@ -225,11 +240,14 @@ class PRIn(BaseModel):
     confirm: bool = False
 
 
-def _feature(repo_id: str, provider: str | None, fn):
+def _feature(repo_id: str, provider: str | None, fn, emit=None):
     s = get_settings()
     _, root, index = _repo(repo_id)
     try:
-        return fn(get_llm(provider), RepoTools(root, index, s.test_timeout), s)
+        llm, tools = get_llm(provider), RepoTools(root, index, s.test_timeout)
+        if emit:
+            instrument.instrument(None, llm, tools, emit)
+        return fn(llm, tools, s)
     except ValueError as e:
         raise HTTPException(400, str(e))
     except Exception as e:
@@ -285,3 +303,163 @@ def create_pr(body: PRIn):
         raise HTTPException(400, str(e))
     except Exception as e:
         raise HTTPException(502, f"GitHub request failed: {type(e).__name__}: {e}")
+
+
+# ---- v5: IDE endpoints (symbols, text search, git, terminal, live agent stream) --------------------
+@app.get("/repositories/{repo_id}/symbols")
+def symbols(repo_id: str, path: str | None = None, q: str | None = None, limit: int = 200):
+    """Functions, methods and classes: of one file (`path`) or across the repository (`q` filters by name)."""
+    return textsearch.symbols(_repo(repo_id)[2], path, q, min(limit, 1000))
+
+
+class SaveIn(BaseModel):
+    path: str
+    text: str
+
+
+@app.put("/repositories/{repo_id}/file")
+def save_file(repo_id: str, body: SaveIn):
+    """Save an edit made in the IDE editor to the server's working copy (never your original folder), then re-index."""
+    _, root, _ = _repo(repo_id)
+    try:
+        p = safe_path(root, body.path)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if not p.is_file():
+        raise HTTPException(400, f"file not found: {body.path}")
+    if len(body.text) > 2_000_000:
+        raise HTTPException(400, "file too large to save from the editor")
+    with open(p, "w", encoding="utf-8", newline="\n") as f:
+        f.write(body.text)
+    return service().reindex(repo_id)
+
+
+@app.get("/repositories/{repo_id}/grep")
+def grep(repo_id: str, q: str, regex: bool = False, case: bool = False, limit: int = 300):
+    """Exact text / regex search over every indexed file."""
+    _, root, index = _repo(repo_id)
+    try:
+        return textsearch.grep(root, index.tree, q, regex, case, min(limit, 1000))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+def _git_call(fn, *a):
+    try:
+        return fn(*a)
+    except (gitops.GitError, ValueError) as e:
+        raise HTTPException(400, str(e))
+
+
+@app.get("/repositories/{repo_id}/git/status")
+def git_status(repo_id: str):
+    return _git_call(gitops.status, _repo(repo_id)[1])
+
+
+@app.get("/repositories/{repo_id}/git/file")
+def git_file(repo_id: str, path: str):
+    """Original (HEAD) and current text of one file, for the diff viewer."""
+    return _git_call(gitops.file_versions, _repo(repo_id)[1], path)
+
+
+class PathIn(BaseModel):
+    repo_id: str
+    path: str
+
+
+class CommitIn(BaseModel):
+    repo_id: str
+    message: str
+
+
+@app.post("/git/discard")
+def git_discard(body: PathIn):
+    _git_call(gitops.discard, _repo(body.repo_id)[1], body.path)
+    service().reindex(body.repo_id)
+    return gitops.status(_repo(body.repo_id)[1])
+
+
+@app.post("/git/commit")
+def git_commit(body: CommitIn):
+    return _git_call(gitops.commit, _repo(body.repo_id)[1], body.message)
+
+
+class TerminalIn(BaseModel):
+    repo_id: str
+    command: str
+
+
+@app.post("/terminal/exec")
+def terminal_exec(body: TerminalIn):
+    _, root, index = _repo(body.repo_id)
+    return terminal.execute(root, index, body.command, get_settings().test_timeout)
+
+
+class StreamIn(BaseModel):
+    repo_id: str
+    mode: Literal["chat", "debug", "fix", "change", "tests", "review", "architecture"]
+    text: str = ""            # question, error report or change request
+    target: str | None = None  # file for tests / review
+    provider: str | None = None
+    verify: bool = True
+
+
+@app.post("/agent/stream")
+def agent_stream(body: StreamIn):
+    """Run the agent and stream what it does (tool calls, model calls, steps) as server-sent events,
+    ending with one `result` event. Same results as /chat, /debug, /change, ... but observable live."""
+    _repo(body.repo_id)  # 404 early
+    q: queue.Queue = queue.Queue()
+    counter = itertools.count(1)
+    emitted_steps = [0]
+
+    def emit(ev: dict) -> None:
+        if ev.get("type") == "step":
+            emitted_steps[0] += 1
+        q.put({"seq": next(counter), "ts": time.time(), **ev})
+
+    def work() -> None:
+        try:
+            emit({"type": "run_start", "mode": body.mode})
+            ask = AskIn(repo_id=body.repo_id, question=body.text, provider=body.provider)
+            m = body.mode
+            if m == "chat":
+                res = _run(ask, False, emit=emit)
+            elif m == "debug":
+                res = _run(ask, True, True, emit=emit)
+            elif m == "fix":
+                res = _run(ask, True, False, emit=emit)
+            elif m == "change":
+                res = _feature(body.repo_id, body.provider, lambda llm, t, s: features.change_code(llm, t, s, body.text, body.verify), emit)
+            elif m == "tests":
+                res = _feature(body.repo_id, body.provider, lambda llm, t, s: features.generate_tests(llm, t, s, body.target or body.text, body.verify), emit)
+            elif m == "review":
+                res = _feature(body.repo_id, body.provider, lambda llm, t, s: features.review(llm, t, body.target or None), emit)
+            else:
+                res = _feature(body.repo_id, body.provider, lambda llm, t, s: features.architecture(llm, t), emit)
+            if not emitted_steps[0]:  # features that only report steps at the end
+                for st in res.get("steps", []):
+                    emit({"type": "step", **st})
+            q.put({"seq": next(counter), "ts": time.time(), "type": "result", "mode": m, "data": res})
+        except HTTPException as e:
+            q.put({"seq": next(counter), "ts": time.time(), "type": "error", "message": str(e.detail)})
+        except Exception as e:  # noqa: BLE001 - surface anything to the UI
+            q.put({"seq": next(counter), "ts": time.time(), "type": "error", "message": f"{type(e).__name__}: {e}"})
+        finally:
+            q.put(None)
+
+    threading.Thread(target=work, daemon=True).start()
+
+    def gen():
+        while True:
+            try:
+                ev = q.get(timeout=15)
+            except queue.Empty:
+                yield ": keepalive\n\n"
+                continue
+            if ev is None:
+                break
+            yield f"data: {json.dumps(ev)}\n\n"
+
+    return StreamingResponse(gen(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})

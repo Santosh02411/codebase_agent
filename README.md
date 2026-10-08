@@ -16,6 +16,13 @@ python -m app.evaluation --repo tests/fixtures/delivery_sync   # retrieval metri
 With a real model: set `LLM_PROVIDER=gemini|openai`, the API key, and `LLM_MODEL`.
 The `mock` provider only does retrieval-based answers — patch generation needs a real LLM.
 
+## IDE frontend (v5)
+A Next.js workspace with editor, AI chat, search, git changes, terminal, test results, live agent activity and a diff viewer lives in [`frontend/`](frontend/README.md).
+```bash
+cd frontend && cp .env.example .env.local && npm install && npm run dev   # http://localhost:3000
+```
+The original single-page UI at http://localhost:8000 still works.
+
 ## Try it
 ```bash
 curl -X POST localhost:8000/repositories -H 'content-type: application/json' \

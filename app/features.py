@@ -116,7 +116,20 @@ def review(llm, tools, path: str | None = None) -> dict:
 # ---- code changes and test generation (shared engine) ---------------------------------------
 def _change(llm, tools, s, task: str, head: str, queries: list[str], verify: bool, extra: str = "") -> dict:
     ctx = _context(tools, queries)
-    steps = [{"node": "retrieve", "message": f"read {len(ctx)} relevant code pieces"}]
+    steps: list[dict] = []
+
+    def note(node: str, message: str) -> None:
+        steps.append({"node": node, "message": message})
+        emit = getattr(tools, "emit", None)
+        if emit:
+            emit({"type": "step", "node": node, "message": message})
+
+    def status_line(message: str) -> None:
+        emit = getattr(tools, "emit", None)
+        if emit:
+            emit({"type": "status", "message": message})
+
+    note("retrieve", f"read {len(ctx)} relevant code pieces")
     before = after = plan = None
     res: dict = {}
     feedback = ""
@@ -127,27 +140,28 @@ def _change(llm, tools, s, task: str, head: str, queries: list[str], verify: boo
             plan = patching.plan_changes(tools.root, res.get("edits"), res.get("new_files"))
         except ValueError as e:
             plan = None
-            steps.append({"node": "generate", "message": f"attempt {attempt} rejected: {e}"})
+            note("generate", f"attempt {attempt} rejected: {e}")
             feedback = f"\nYour previous answer was invalid: {e}\n"
             continue
-        steps.append({"node": "generate", "message": f"attempt {attempt}: {len(plan)} file(s): {', '.join(plan)}"})
+        note("generate", f"attempt {attempt}: {len(plan)} file(s): {', '.join(plan)}")
         if not verify:
             status = "unverified"
             break
+        status_line("Running tests in a sandbox copy…")
         if before is None:
             work = sandbox.copy_repo(tools.root)
             try:
                 before = sandbox.run_tests(work, s.test_timeout)
             finally:
                 sandbox.cleanup(work)
-            steps.append({"node": "verify", "message": f"tests before: {before['status']} ({before['summary']})"})
+            note("verify", f"tests before: {before['status']} ({before['summary']})")
         work = sandbox.copy_repo(tools.root)
         try:
             patching.apply_changes(work, res.get("edits"), res.get("new_files"))
             after = sandbox.run_tests(work, s.test_timeout)
         finally:
             sandbox.cleanup(work)
-        steps.append({"node": "verify", "message": f"tests after: {after['status']} ({after['summary']})"})
+        note("verify", f"tests after: {after['status']} ({after['summary']})")
         if after["status"] == "passed":
             status = "verified"
             break

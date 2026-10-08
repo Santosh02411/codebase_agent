@@ -90,6 +90,7 @@ Legend: ✅ done & tested · 🟡 implemented, not yet verified with real servic
 - Sandbox is process-level isolation, not a container — do not run untrusted repos on a shared server yet
 
 ## Version history
+- **v5** — Next.js IDE frontend (Monaco, Zustand, TanStack Query); backend adds live agent stream (SSE), symbols, text search, git status/diff/discard/commit, restricted terminal, save-file; `copy_local` recursion fix
 - **v4** — Architecture, review, multi-file changes, test generation, GitHub PRs, modular frontend, 40 tests
 - **v3** — Web UI at `/`, more retrieval priors (imports, backend/frontend, HTTP method), 30 tests
 - **v2** — Retrieval quality fixes for large repos (priors, route metadata, stemming), auto `.env` loading, zip-upload fix, regression tests
