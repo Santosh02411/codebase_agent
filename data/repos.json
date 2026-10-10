@@ -7,5 +7,14 @@
     "chunks": 2796,
     "embedder": "hash",
     "indexed_at": "2026-10-07T20:27:25Z"
+  },
+  "codebase-agent-v7-3b170d": {
+    "id": "codebase-agent-v7-3b170d",
+    "name": "codebase-agent-v7",
+    "source": "upload:codebase-agent-v7",
+    "files": 110,
+    "chunks": 583,
+    "embedder": "hash",
+    "indexed_at": "2026-10-08T08:04:26Z"
   }
 }
