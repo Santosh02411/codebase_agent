@@ -5,7 +5,7 @@ import re
 import time
 from pathlib import Path
 
-from . import ingest
+from . import gitops, ingest
 from .config import Settings
 from .retrieval.embeddings import get_embedder
 from .retrieval.index import CodeIndex
@@ -52,6 +52,10 @@ class RepoService:
         return self._index(repo_id, name, f"upload:{name}", dest)
 
     def _index(self, repo_id: str, name: str, source: str, root: Path) -> dict:
+        try:
+            gitops.ensure_repo(root)  # baseline commit so the IDE can show Git changes
+        except gitops.GitError:
+            pass
         index = ingest.build_index(root, get_embedder(self.s.embedding_provider))
         index.save(self.idx_dir / f"{repo_id}.pkl")
         self._cache[repo_id] = index
