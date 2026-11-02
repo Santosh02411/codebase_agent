@@ -45,5 +45,16 @@ Local folders need `ALLOW_LOCAL_PATHS=true`. Run `/debug` only on repos you trus
 | Open a GitHub pull request | button on a change | `/create-pr` (needs `GITHUB_TOKEN`, project added from a GitHub URL) |
 Code changes are always tested before and after in a throwaway copy, and nothing touches your project until you click Apply.
 
+## Repository management & code intelligence (v6)
+**Import** from GitHub (sign-in with OAuth, then pick any repo including private ones), any Git URL (GitLab and Bitbucket work; private ones via token in `.env`), ZIP, or a local folder. Choose the **branch** at import; later switch branch or analyse a specific **commit** from the Repository panel. After an import the dashboard shows files, languages, functions, classes, dependencies, tests, API endpoints, DB models and indexing status.
+
+**Incremental indexing:** each file is hashed; only changed files are re-parsed and only new code is re-embedded. Switching branches re-processes just the files that differ (the report shows e.g. "3 files reprocessed, 120 reused").
+
+**Code understanding, not fixed-size chunks:** Python uses the standard `ast` module; JavaScript, TypeScript/TSX, Java, C, C++, Go and Rust use Tree-sitter (Python files with syntax errors fall back to Tree-sitter too). Extracted per file: functions, classes, methods, interfaces/traits/structs/enums, variables, imports, doc comments, TODOs, API routes (Flask, FastAPI, Django, Express, NestJS, Spring, JAX-RS, Go net/http & gin/echo/chi, Actix/Rocket/Axum), ORM models (Django, SQLAlchemy, TypeORM, Mongoose/Sequelize, JPA, GORM, Diesel/SQLx) and test cases. From those the engine builds a **call graph**, **import/module graph**, **inheritance graph** and **impact analysis**. The agent receives these relationships with the code it retrieves, and can call `callers`, `callees` and `impact` as tools.
+
+Known limits: resolution is static and name-based, so dynamic dispatch, reflection, decorators that rewrite calls, and calls through untyped variables are only resolved when the method name is unique (those edges are marked "guessed by name"). Go/Rust cross-file `impl` blocks and TypeScript path aliases other than `@/` are not followed. Other languages (C#, Ruby, PHP, Kotlin…) are indexed as text; adding one means adding a grammar package and a visitor in `app/intel/ts_langs.py`.
+
+**GitHub sign-in:** create an OAuth App (callback `http://localhost:8000/auth/github/callback`) and set `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`. The token is stored in `data/auth.json` (mode 0600), never sent to the browser, and passed to git through the environment. This server assumes **one local user**; add real accounts before exposing it on a network.
+
 ## Pushing to GitHub
 `venv/`, `.env` and `data/` are git-ignored. Never commit the virtual environment; others recreate it from `requirements.txt`.
