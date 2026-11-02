@@ -8,9 +8,13 @@ import numpy as np
 from ..intel.graph import CodeGraph
 from ..intel.model import FileFacts
 from ..parsing.chunker import Chunk
-from ..utils import tokenize
+from ..config import get_settings
+from ..rag.embedders import get_embedder
+from ..rag.rerank import get_reranker
+from ..rag.retriever import MemoryBackend, Retriever, RetrievalConfig
+from ..rag.textutil import chunk_tokens
 from .bm25 import BM25
-from .embeddings import get_embedder
+
 
 
 class StaleIndex(Exception):
@@ -27,7 +31,7 @@ class CodeIndex:
 
     def __init__(self, chunks: list[Chunk], embeddings: np.ndarray, tree: list[str], deps: dict,
                  imports: dict, embedder_name: str, embedder=None, facts: dict[str, FileFacts] | None = None,
-                 graph: CodeGraph | None = None, context: dict | None = None) -> None:
+                 graph: CodeGraph | None = None, context: dict | None = None, build_bm25: bool = True) -> None:
         self.chunks, self.emb, self.tree, self.deps, self.imports = chunks, embeddings, tree, deps, imports
         self.facts = facts or {}
         self.context = context or {}
@@ -36,30 +40,36 @@ class CodeIndex:
         self.chunk_by_symbol = {c.symbol_id: c for c in chunks if c.symbol_id}
         self.embedder_name = embedder_name
         self.embedder = embedder or get_embedder(embedder_name)
-        self.tokens = [tokenize(f"{c.file} {c.qualname} {c.route} {c.text}") for c in chunks]
+        self.tokens = [chunk_tokens(c) for c in chunks]
         self.token_sets = [set(t) for t in self.tokens]
-        self.bm25 = BM25(self.tokens)
+        self.bm25 = BM25(self.tokens) if build_bm25 else None
         self.by_name: dict[str, list[Chunk]] = defaultdict(list)
         for c in chunks:
             if c.kind in ("function", "method", "class"):
                 self.by_name[c.name].append(c)
 
+    # ---- retrieval -----------------------------------------------------------------------------
+    def make_backend(self):
+        """Search legs for this index. Overridden by the PostgreSQL-backed index."""
+        return MemoryBackend(self)
+
+    def retriever(self, reranker: str | None = None, config: RetrievalConfig | None = None, llm=None) -> Retriever:
+        """Retriever configured from the server settings (or explicit overrides). Cheap: models are cached globally."""
+        s = get_settings()
+        spec = s.reranker if reranker is None else reranker
+        vw = s.vector_weight if s.vector_weight is not None else (0.25 if self.embedder_name == "hash" else 1.0)
+        cfg = config or RetrievalConfig(mode=s.retrieval_mode, rrf_k=s.rrf_k, vector_weight=vw, keyword_weight=s.keyword_weight,
+                                        candidates=s.retrieval_candidates)
+        key = (spec, cfg.mode, cfg.rrf_k, cfg.candidates, cfg.vector_weight, cfg.keyword_weight, id(llm))
+        cache = self.__dict__.setdefault("_retrievers", {})
+        if key not in cache:
+            cache[key] = Retriever(self, self.embedder, self.make_backend(), get_reranker(spec, index=self, llm=llm), cfg)
+        return cache[key]
+
     def search(self, query: str, k: int = 20) -> list[tuple[Chunk, float]]:
-        """Hybrid retrieval. Returns (chunk, fused score in [0,1])."""
-        if not self.chunks:
-            return []
-        bm = self.bm25.scores(tokenize(query))
-        vec = self.emb @ self.embedder.embed([query])[0]
-        scores: dict[int, float] = {}
-        for ranking in (
-            [int(i) for i in np.argsort(-bm)[:50] if bm[i] > 0],
-            [int(i) for i in np.argsort(-vec)[:50]],
-        ):
-            for r, i in enumerate(ranking):
-                scores[i] = scores.get(i, 0.0) + 1.0 / (60 + r + 1)
-        top = sorted(scores.items(), key=lambda x: -x[1])[:k]
-        norm = 2.0 / 61.0
-        return [(self.chunks[i], s / norm) for i, s in top]
+        """Fused hybrid retrieval without reranking. Returns (chunk, RRF score scaled to [0, 1])."""
+        r = Retriever(self, self.embedder, self.make_backend(), None, RetrievalConfig(mode="hybrid")).retrieve(query, k, rerank=False)
+        return [(h.chunk, h.rrf_norm) for h in r.hits]
 
     def _via_graph(self, chunk: Chunk, edges, limit: int) -> list[Chunk]:
         out: list[Chunk] = []

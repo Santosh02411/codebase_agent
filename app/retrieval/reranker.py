@@ -31,18 +31,23 @@ def _category(file: str) -> str:
     return "code"
 
 
+def prior_multiplier(chunk, qtoks: set[str]) -> float:
+    """Code-vs-docs/tests/config prior and chunk-kind weight (no lexical term): 1.0 = neutral."""
+    mult = {"doc": 1.5 if qtoks & _DOC_WORDS else 0.45,
+            "test": 1.0 if qtoks & _TEST_WORDS else 0.6,
+            "config": 1.0 if qtoks & _CFG_WORDS else 0.5, "code": 1.0}
+    cat = _category(chunk.file)
+    return (1.0 if cat == "doc" else _KIND_W.get(chunk.kind, 0.7)) * mult[cat]
+
+
 def rerank(index, query: str, results, top_n: int = 5):
     """Lightweight lexical cross-scorer: term coverage + symbol/path/route match, with priors that favour
-    real code (functions, handlers) over docs, tests and config unless the question asks for them.
-    Interface is stable so a cross-encoder / LLM reranker can replace it (Phase 3)."""
+    real code (functions, handlers) over docs, tests and config unless the question asks for them."""
     qtoks = set(tokenize(query))
     q = {t for t in qtoks if t not in _STOP and len(t) > 1}
     endpointish = bool(qtoks & _ENDPOINT_WORDS)
     writes = any(t.startswith(_WRITE) for t in qtoks)
     reads = any(t.startswith(_READ) for t in qtoks)
-    mult = {"doc": 1.5 if qtoks & _DOC_WORDS else 0.45,
-            "test": 1.0 if qtoks & _TEST_WORDS else 0.6,
-            "config": 1.0 if qtoks & _CFG_WORDS else 0.5, "code": 1.0}
     scored = []
     for chunk, fused in results:
         doc = index.token_sets[chunk.id]
@@ -69,8 +74,7 @@ def rerank(index, query: str, results, top_n: int = 5):
             score *= 1.15 if top == "backend" else 0.85 if top in ("frontend", "mobile") else 1.0
         elif qtoks & _FRONTEND_WORDS and not qtoks & _BACKEND_WORDS:
             score *= 1.15 if top in ("frontend", "mobile") else 0.85 if top == "backend" else 1.0
-        cat = _category(chunk.file)
-        score *= (1.0 if cat == "doc" else _KIND_W.get(chunk.kind, 0.7)) * mult[cat]
+        score *= prior_multiplier(chunk, qtoks)
         scored.append((chunk, score))
     scored.sort(key=lambda x: -x[1])
     return scored[:top_n]
