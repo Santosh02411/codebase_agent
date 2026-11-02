@@ -49,13 +49,16 @@ export function CommandPalette({ repoId }: { repoId: string }) {
         { id: "term", label: "Show terminal", icon: <Terminal className="size-3.5" />, run: () => st.setBottom("terminal") },
         { id: "act", label: "Show agent activity", icon: <Terminal className="size-3.5" />, run: () => st.setBottom("activity") },
         { id: "chat", label: "Toggle AI chat", icon: <Terminal className="size-3.5" />, run: () => st.toggleChat() },
+        { id: "mg", label: "Show repository module graph", icon: <Search className="size-3.5" />, run: () => st.openGraph("modules", undefined, "Module graph") },
+        { id: "mgf", label: "Show module graph of current file", icon: <Search className="size-3.5" />, run: () => { if (activePath) st.openGraph("modules", activePath, `Modules: ${activePath.split("/").pop()}`); else toast.message("Open a file first"); } },
+        { id: "repo", label: "Show repository stats, branches and commits", icon: <Search className="size-3.5" />, run: () => st.setSidebar("repo") },
         { id: "sym", label: "Go to function in file…", icon: <Braces className="size-3.5" />, run: () => setTimeout(() => st.setPalette("symbols"), 0) },
         { id: "wsym", label: "Go to function in repository…", icon: <Braces className="size-3.5" />, run: () => setTimeout(() => st.setPalette("workspace"), 0) },
       ];
       return cmds.filter((c) => fuzzy(q, c.label) >= 0);
     }
     return [];
-  }, [mode, q, tree.data, fileSyms.data, repoSyms.data, repoId, reindex, run]);
+  }, [mode, q, tree.data, fileSyms.data, repoSyms.data, repoId, reindex, run, activePath]);
 
   useEffect(() => setSel(0), [q, mode]);
   if (!mode) return null;

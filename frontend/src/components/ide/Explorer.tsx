@@ -1,6 +1,6 @@
 "use client";
 import { useMemo, useState } from "react";
-import { Braces, ChevronDown, ChevronRight, File, FileCode2, FileJson, FileText, Folder, FolderOpen, FunctionSquare, Box } from "lucide-react";
+import { Braces, ChevronDown, ChevronRight, File, FileCode2, FileJson, FileText, Folder, FolderOpen, FunctionSquare, Box, Network } from "lucide-react";
 import { useFileSymbols, useGitStatus, useTree } from "@/hooks/queries";
 import { useIde } from "@/store/ide";
 import { Input } from "@/components/ui/input";
@@ -66,6 +66,8 @@ function Row({ node, depth, open, toggle, active, status }: { node: Node; depth:
 
 const KIND_ICON: Record<string, React.ReactNode> = {
   function: <FunctionSquare className="size-3.5 text-violet-400" />, method: <FunctionSquare className="size-3.5 text-violet-300" />, class: <Box className="size-3.5 text-amber-400" />,
+  interface: <Box className="size-3.5 text-teal-400" />, trait: <Box className="size-3.5 text-teal-400" />, struct: <Box className="size-3.5 text-orange-400" />,
+  enum: <Box className="size-3.5 text-pink-400" />, type: <Box className="size-3.5 text-slate-400" />,
 };
 
 export function Explorer({ repoId }: { repoId: string }) {
@@ -111,11 +113,14 @@ export function Explorer({ repoId }: { repoId: string }) {
           {!activePath && <div className="px-3 pb-2 text-muted-foreground">Open a file to see its functions.</div>}
           {activePath && symbols.data?.length === 0 && <div className="px-3 pb-2 text-muted-foreground">No functions or classes found.</div>}
           {symbols.data?.map((s) => (
-            <button key={`${s.qualname}:${s.start}`} onClick={() => openFile(s.file, s.start, s.end)} className="flex h-6 w-full items-center gap-1.5 px-3 text-left hover:bg-accent/60" title={`${s.qualname} · line ${s.start}`}>
-              {KIND_ICON[s.kind] ?? <Braces className="size-3.5" />}
-              <span className="truncate">{s.qualname}</span>
-              <span className="ml-auto text-[10px] text-muted-foreground">{s.start}</span>
-            </button>
+            <div key={s.id} className="group flex h-6 items-center hover:bg-accent/60">
+              <button onClick={() => openFile(s.file, s.start, s.end)} className="flex min-w-0 flex-1 items-center gap-1.5 px-3 text-left" title={`${s.signature || s.qualname} · line ${s.start}`}>
+                {KIND_ICON[s.kind] ?? <Braces className="size-3.5" />}
+                <span className="truncate">{s.qualname}</span>
+              </button>
+              <button onClick={() => useIde.getState().openGraph("calls", s.id, `Calls: ${s.qualname}`)} className="mr-1 hidden rounded p-0.5 text-muted-foreground hover:bg-background hover:text-foreground group-hover:block" title="Show call graph"><Network className="size-3.5" /></button>
+              <span className="w-8 pr-2 text-right text-[10px] text-muted-foreground group-hover:hidden">{s.start}</span>
+            </div>
           ))}
         </ScrollArea>
       </div>

@@ -1,8 +1,50 @@
 // Shapes returned by the FastAPI backend (see app/main.py).
-export interface RepoMeta { id: string; name: string; source: string; files: number; chunks: number; embedder: string; indexed_at: string }
+export interface IndexReport {
+  mode: "full" | "incremental"; files_total: number; files_added: number; files_changed: number; files_removed: number; files_unchanged: number;
+  chunks_total: number; chunks_embedded: number; chunks_reused: number; duration_ms: number; changed_files: string[]; parsers: Record<string, number>;
+}
+export interface RepoMeta {
+  id: string; name: string; source: string; files: number; chunks: number; embedder: string; indexed_at: string;
+  provider?: string; branch?: string; commit?: string; detached?: boolean; languages?: string[]; symbols?: number; last_index?: IndexReport;
+}
+export interface IndexStatus { state: "indexing" | "ready" | "error" | "unknown"; phase?: string; done?: number; total?: number; error?: string; report?: IndexReport }
+export interface LangStat { language: string; files: number; lines: number; symbols: number }
+export interface ApiItem { method: string; path: string; handler: string; file: string; line: number; framework: string }
+export interface ModelItem { name: string; file: string; line: number; framework: string; fields: number }
+export interface RepoStats {
+  files: number; code_files: number; lines: number; comment_lines: number; todos: number; languages: LangStat[];
+  symbols: { functions: number; methods: number; classes: number; interfaces: number; structs: number; enums: number; types: number; variables: number; total: number };
+  dependencies: { declared: { name: string; ecosystem: string }[]; declared_count: number; external_imports: { name: string; files: number }[]; manifests: string[] };
+  tests: { files: number; cases: number; file_list: string[] };
+  apis: { count: number; items: ApiItem[] };
+  models: ModelItem[];
+  graph: { module_edges: number; files_with_imports: number; call_edges: number; calls_seen: number; call_resolution_pct: number; inheritance_edges: number };
+  parsers: Record<string, number>; parse_errors: { file: string; errors: string[] }[];
+  repo: { id: string; name: string; source: string; provider: string; branch: string; commit: string; detached: boolean };
+  indexing: IndexStatus & { indexed_at?: string; embedder: string; chunks: number; last_index: IndexReport };
+}
+export interface Branch { name: string; sha: string; date: string; subject: string; current: boolean; remote: boolean }
+export interface BranchInfo { current: string; commit: string; detached: boolean; default: string; branches: Branch[]; shallow: boolean }
+export interface CommitInfo { sha: string; short: string; author: string; date: string; subject: string }
+export interface RemotePreview { provider: string; name: string; branches: string[]; default: string }
+export interface AuthStatus {
+  github: { oauth_configured: boolean; connected: boolean; user: { login: string; name: string; avatar: string } | null; token_in_env: boolean };
+  gitlab: { token_in_env: boolean; oauth: string }; bitbucket: { token_in_env: boolean; oauth: string };
+}
+export interface GithubRepo { full_name: string; private: boolean; default_branch: string; url: string; description: string; updated_at: string; language: string }
+export interface SymbolRef { id: string; qualname: string; kind: string; file: string; start: number; end: number; confidence: string }
+export interface SymbolDetail {
+  id: string; name: string; qualname: string; kind: string; file: string; start: number; end: number; language: string; signature: string; doc: string;
+  route: string; decorators: string[]; tags: string[]; bases: string[]; extra: Record<string, unknown>; exported: boolean;
+  callers: SymbolRef[]; callees: SymbolRef[]; base_symbols: SymbolRef[]; derived: SymbolRef[]; unresolved_calls: string[];
+}
+export interface GraphNode { id: string; name: string; file: string; level?: number; kind?: string; qualname?: string; start?: number; end?: number; count?: number; signature?: string; language?: string; symbols?: number; external?: string[]; route?: string }
+export interface GraphEdge { source: string; target: string; confidence?: string; weight?: number }
+export interface Graph { nodes: GraphNode[]; edges: GraphEdge[]; collapsed?: boolean }
+export interface Impact { file: string; dependents: { file: string; distance: number }[]; tests: string[] }
 export interface Health { status: string; llm_provider: string; embedding_provider: string; llm_model: string; github_configured: boolean; git_available: boolean; allow_local_paths: boolean }
 export interface Chunk { id: number; file: string; kind: string; name: string; qualname: string; start: number; end: number; text: string; via: string; route: string; score?: number }
-export interface SymbolInfo { name: string; qualname: string; kind: string; file: string; start: number; end: number; route?: string }
+export interface SymbolInfo { id: string; name: string; qualname: string; kind: string; file: string; start: number; end: number; route?: string; signature?: string; doc?: string; parent?: string }
 export interface Source { file: string; lines: string; symbol: string }
 export interface TestRun { status: string; passed: boolean; summary: string; output: string }
 export interface Step { node: string; message: string }

@@ -3,11 +3,12 @@ import { persist } from "zustand/middleware";
 import type { AgentEvent, ChatMessage, Decision, Mode, Proposal, Run, TermLine, TestEntry, TestRun } from "@/lib/types";
 import { basename, uid } from "@/lib/utils";
 
-export type SidebarView = "explorer" | "search" | "git";
+export type SidebarView = "explorer" | "search" | "repo" | "git";
 export type BottomTab = "activity" | "terminal" | "tests" | "sources" | "problems";
 export type PaletteMode = "files" | "symbols" | "workspace" | "commands";
 
-export interface Tab { id: string; kind: "file" | "review" | "diff"; path?: string; proposalId?: string; title: string }
+export interface GraphFocus { mode: "calls" | "modules"; focus?: string }
+export interface Tab { id: string; kind: "file" | "review" | "diff" | "graph"; path?: string; proposalId?: string; title: string; graph?: GraphFocus }
 export interface Selection { file: string; startLine: number; endLine: number; text: string }
 export interface Reveal { path: string; line: number; endLine: number; nonce: number }
 
@@ -24,6 +25,7 @@ interface IdeState {
   openFile: (path: string, line?: number, endLine?: number) => void;
   openReview: (proposalId: string) => void;
   openDiff: (path: string) => void;
+  openGraph: (mode: "calls" | "modules", focus: string | undefined, title: string) => void;
   closeTab: (id: string) => void;
   setActiveTab: (id: string) => void;
   reveal: Reveal | null;
@@ -99,6 +101,12 @@ export const useIde = create<IdeState>()(
         set((s) => {
           const id = `diff:${path}`;
           return { tabs: s.tabs.some((t) => t.id === id) ? s.tabs : [...s.tabs, { id, kind: "diff" as const, path, title: `${basename(path)} (changes)` }], activeTabId: id };
+        }),
+      openGraph: (mode, focus, title) =>
+        set((s) => {
+          const id = `graph:${mode}:${focus ?? "*"}`;
+          const tab: Tab = { id, kind: "graph", title, graph: { mode, focus } };
+          return { tabs: s.tabs.some((t) => t.id === id) ? s.tabs : [...s.tabs, tab], activeTabId: id };
         }),
       closeTab: (id) =>
         set((s) => {

@@ -1,6 +1,6 @@
 "use client";
 import { Fragment, useMemo } from "react";
-import { ChevronRight, FileSearch, GitCompare, MessageSquarePlus, Sparkles, TestTube2, Wand2, X, FileDiff, Keyboard } from "lucide-react";
+import { ChevronRight, FileSearch, GitCompare, MessageSquarePlus, Network, Sparkles, TestTube2, Wand2, X, FileDiff, Keyboard } from "lucide-react";
 import { useFileSymbols } from "@/hooks/queries";
 import { useAgentRun } from "@/hooks/useAgentRun";
 import { useIde, type Tab } from "@/store/ide";
@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { FileIcon } from "./Explorer";
 import { GitDiffTab, ReviewTab } from "./DiffViews";
 import { MonacoEditor } from "./MonacoEditor";
+import { GraphTab } from "./GraphTab";
 
 function TabButton({ tab, active }: { tab: Tab; active: boolean }) {
   const { setActiveTab, closeTab } = useIde.getState();
@@ -25,6 +26,7 @@ function TabButton({ tab, active }: { tab: Tab; active: boolean }) {
       {tab.kind === "file" && tab.path && <FileIcon name={tab.path} />}
       {tab.kind === "review" && <FileDiff className="size-3.5 text-primary" />}
       {tab.kind === "diff" && <GitCompare className="size-3.5 text-amber-400" />}
+      {tab.kind === "graph" && <Network className="size-3.5 text-emerald-400" />}
       <span className="max-w-48 truncate">{tab.title}</span>
       {proposal?.applied && <span className="text-[10px] text-success">applied</span>}
       <button
@@ -52,6 +54,10 @@ function Breadcrumbs({ repoId, path }: { repoId: string; path: string }) {
         <span key={i} className="flex items-center gap-1">{seg}{i < a.length - 1 && <ChevronRight className="size-3" />}</span>
       ))}
       {current && <><ChevronRight className="size-3" /><span className="text-foreground">{current.qualname}</span></>}
+      <span className="ml-auto flex shrink-0 gap-1">
+        {current && <button onClick={() => useIde.getState().openGraph("calls", current.id, `Calls: ${current.qualname}`)} className="flex items-center gap-1 rounded px-1.5 hover:bg-accent hover:text-foreground"><Network className="size-3" />Call graph</button>}
+        <button onClick={() => useIde.getState().openGraph("modules", path, `Modules: ${path.split("/").pop()}`)} className="flex items-center gap-1 rounded px-1.5 hover:bg-accent hover:text-foreground"><Network className="size-3" />Module graph</button>
+      </span>
     </div>
   );
 }
@@ -106,6 +112,7 @@ export function EditorArea({ repoId }: { repoId: string }) {
         {active?.kind === "file" && active.path && <><MonacoEditor repoId={repoId} path={active.path} /><SelectionBar /></>}
         {active?.kind === "review" && active.proposalId && <ReviewTab key={active.proposalId} repoId={repoId} proposalId={active.proposalId} />}
         {active?.kind === "diff" && active.path && <GitDiffTab key={active.path} repoId={repoId} path={active.path} />}
+        {active?.kind === "graph" && active.graph && <GraphTab key={active.id} repoId={repoId} graph={active.graph} />}
       </div>
     </div>
   );

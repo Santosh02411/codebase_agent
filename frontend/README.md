@@ -21,6 +21,8 @@ Monaco loads from a CDN, so the first load needs internet access.
 |---|---|
 | Explorer + Outline | File tree with git markers; the open file's functions/classes, click to jump |
 | Search | Exact text/regex across the repo, or semantic search over the AI index |
+| Repository | Stats dashboard (files, languages, functions, classes, dependencies, tests, APIs, DB models), indexing status and last-run report, branch switcher, commit history, "Analyze this commit" |
+| Graphs | Call graph of any function (callers ← → callees, with confidence), module graph of a file or the whole repo, impact analysis ("if you change this file…") |
 | Git changes | Working copy vs. imported version, diff viewer, discard, commit (in the server's copy) |
 | Editor | Monaco, tabs, breadcrumbs with current function, Ctrl+S saves to the project copy |
 | Selection toolbar | Select code → Ask AI / Explain / Tests / Change (or Ctrl+L) |

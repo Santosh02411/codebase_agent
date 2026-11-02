@@ -1,5 +1,6 @@
 import type {
   GitStatus, GitVersions, GrepResult, Health, RepoMeta, SymbolInfo, TerminalResult, TestRun, Chunk, Edit, NewFile,
+  AuthStatus, BranchInfo, CommitInfo, GithubRepo, Graph, Impact, IndexStatus, RemotePreview, RepoStats, SymbolDetail,
 } from "./types";
 
 export const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
@@ -31,7 +32,23 @@ const qs = (o: Record<string, string | number | boolean | undefined>) =>
 export const api = {
   health: () => request<Health>("/health"),
   repos: () => request<RepoMeta[]>("/repositories"),
-  addRepo: (source: string, name?: string) => request<RepoMeta>("/repositories", json("POST", { source, name: name || undefined })),
+  addRepo: (source: string, name?: string, branch?: string) => request<RepoMeta>("/repositories", json("POST", { source, name: name || undefined, branch: branch || undefined })),
+  preview: (source: string) => request<RemotePreview>("/repositories/preview", json("POST", { source })),
+  status: (id: string) => request<IndexStatus>(`/repositories/${id}/status`),
+  activeIndexing: () => request<Record<string, IndexStatus>>("/indexing"),
+  stats: (id: string) => request<RepoStats>(`/repositories/${id}/stats`),
+  branches: (id: string) => request<BranchInfo>(`/repositories/${id}/branches`),
+  commits: (id: string, ref: string | undefined, limit: number, skip: number) => request<CommitInfo[]>(`/repositories/${id}/commits?${qs({ ref, limit, skip })}`),
+  checkout: (id: string, ref: string, force = false) => request<RepoMeta>(`/repositories/${id}/checkout`, json("POST", { ref, force })),
+  fetchHistory: (id: string, deepen = 50) => request<{ shallow: boolean }>(`/repositories/${id}/fetch`, json("POST", { deepen })),
+  symbol: (id: string, symbolId: string) => request<SymbolDetail>(`/repositories/${id}/symbol?${qs({ id: symbolId })}`),
+  graphCalls: (id: string, symbol: string, depth: number, direction: string) => request<Graph>(`/repositories/${id}/graph/calls?${qs({ symbol, depth, direction })}`),
+  graphModules: (id: string, path: string | undefined, depth: number, direction: string) => request<Graph>(`/repositories/${id}/graph/modules?${qs({ path, depth, direction })}`),
+  impact: (id: string, path: string) => request<Impact>(`/repositories/${id}/impact?${qs({ path })}`),
+  authStatus: () => request<AuthStatus>("/auth/status"),
+  githubRepos: (q: string) => request<GithubRepo[]>(`/github/repos?${qs({ q })}`),
+  githubLogout: () => request<{ connected: boolean }>("/auth/github/logout", { method: "POST" }),
+  githubLoginUrl: () => `${API_URL}/auth/github/login`,
   uploadRepo: (file: File, name: string) => {
     const f = new FormData();
     f.append("file", file);

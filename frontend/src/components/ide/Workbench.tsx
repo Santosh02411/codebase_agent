@@ -1,8 +1,9 @@
 "use client";
 import { useEffect } from "react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
-import { Bot, ChevronUp, FolderTree, GitBranch, GitCommitHorizontal, Loader2, PanelBottom, PanelRight, Plus, RefreshCw, Search, Sparkles, Terminal } from "lucide-react";
-import { useGitStatus, useHealth, useRepos, useReindex } from "@/hooks/queries";
+import { Bot, Boxes, ChevronUp, FolderTree, GitBranch, GitCommitHorizontal, Loader2, PanelBottom, PanelRight, Plus, RefreshCw, Search, Sparkles, Terminal } from "lucide-react";
+import { useActiveIndexing, useGitStatus, useHealth, useRepos, useReindex } from "@/hooks/queries";
+import { useQueryClient } from "@tanstack/react-query";
 import { useIde, type SidebarView } from "@/store/ide";
 import { Button } from "@/components/ui/button";
 import { Tip } from "@/components/ui/tooltip";
@@ -14,6 +15,8 @@ import { CommandPalette } from "./CommandPalette";
 import { EditorArea } from "./EditorArea";
 import { Explorer } from "./Explorer";
 import { GitPanel } from "./GitPanel";
+import { RepoPanel } from "./RepoPanel";
+import { toast } from "sonner";
 import { SearchPanel } from "./SearchPanel";
 import { useState } from "react";
 
@@ -38,6 +41,7 @@ function ActivityBar() {
     <div className="flex w-10 shrink-0 flex-col items-center border-r bg-panel">
       <Btn id="explorer" icon={<FolderTree />} label="Explorer" />
       <Btn id="search" icon={<Search />} label="Search" />
+      <Btn id="repo" icon={<Boxes />} label="Repository: stats, branches, commits" />
       <Btn id="git" icon={<GitBranch />} label="Git changes" badge={n} />
     </div>
   );
@@ -54,7 +58,7 @@ function TopBar({ onAdd }: { onAdd: () => void }) {
       <div className="flex items-center gap-1.5 font-semibold"><Sparkles className="size-4 text-primary" />Codebase Agent</div>
       <select value={repoId ?? ""} onChange={(e) => setRepoId(e.target.value || null)} className="ml-3 h-7 max-w-64 rounded-md border border-input bg-background px-2 text-xs">
         {!repos.data?.length && <option value="">No repositories</option>}
-        {repos.data?.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+        {repos.data?.map((r) => <option key={r.id} value={r.id}>{r.name}{r.branch ? `  ·  ${r.branch}` : r.commit ? `  ·  ${r.commit}` : ""}</option>)}
       </select>
       <Button size="sm" variant="outline" onClick={onAdd}><Plus /> Add</Button>
       {repoId && <Tip label="Re-index after external changes"><Button size="icon" variant="ghost" disabled={reindex.isPending} onClick={() => reindex.mutate(repoId)}><RefreshCw className={cn(reindex.isPending && "animate-spin")} /></Button></Tip>}
@@ -78,12 +82,15 @@ function StatusBar() {
   const dirty = useIde((s) => Object.keys(s.buffers).length);
   const setBottom = useIde((s) => s.setBottom);
   const repo = repos.data?.find((r) => r.id === repoId);
+  const indexing = useActiveIndexing();
+  const active = Object.values(indexing.data ?? {}).find((x) => x.state === "indexing");
   return (
     <div className="flex h-6 shrink-0 items-center gap-4 border-t bg-primary/90 px-3 text-[11px] text-primary-foreground">
-      <span className="flex items-center gap-1"><GitBranch className="size-3" />{git.data?.branch || "—"}</span>
+      <button className="flex items-center gap-1 hover:underline" onClick={() => useIde.getState().setSidebar("repo")} title="Branches and commits"><GitBranch className="size-3" />{repo?.branch || repo?.commit || git.data?.branch || "—"}</button>
+      {active && <span className="flex items-center gap-1"><Loader2 className="size-3 animate-spin" />Indexing: {active.phase}{active.total ? ` ${active.done}/${active.total}` : ""}</span>}
       {!!git.data?.files.length && <span className="flex items-center gap-1"><GitCommitHorizontal className="size-3" />{git.data.files.length} changed</span>}
       {dirty > 0 && <span>{dirty} unsaved</span>}
-      {repo && <span>{repo.files} files · {repo.chunks} chunks · {repo.embedder}</span>}
+      {repo && !active && <span>{repo.files} files · {repo.symbols ?? repo.chunks} symbols</span>}
       <button className="flex items-center gap-1 hover:underline" onClick={() => setBottom("activity")}>{running ? <><Loader2 className="size-3 animate-spin" />Agent working…</> : <><Bot className="size-3" />Agent idle</>}</button>
       <span className="ml-auto flex items-center gap-4">
         {selection && <span>{selection.endLine - selection.startLine + 1} lines selected</span>}
@@ -122,6 +129,16 @@ export function Workbench() {
   const bottomOpen = useIde((s) => s.bottomOpen);
   const chatOpen = useIde((s) => s.chatOpen);
   const [adding, setAdding] = useState(false);
+  const qc = useQueryClient();
+
+  // Coming back from GitHub's sign-in page: ?connected=github or ?auth_error=...
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const err = q.get("auth_error");
+    if (q.get("connected") === "github") { toast.success("GitHub connected"); qc.invalidateQueries({ queryKey: ["auth"] }); setAdding(true); }
+    if (err) toast.error(`GitHub sign-in failed: ${err.replace(/_/g, " ")}`);
+    if (q.has("connected") || err) window.history.replaceState({}, "", window.location.pathname);
+  }, [qc]);
 
   // Keep the selected repository valid (first one by default; clear if it was removed on the server).
   useEffect(() => {
@@ -160,6 +177,7 @@ export function Workbench() {
             <Panel id="side" order={1} defaultSize={20} minSize={13} maxSize={40} className="bg-panel">
               {sidebar === "explorer" && <Explorer repoId={repoId} />}
               {sidebar === "search" && <SearchPanel repoId={repoId} />}
+              {sidebar === "repo" && <RepoPanel repoId={repoId} />}
               {sidebar === "git" && <GitPanel repoId={repoId} />}
             </Panel>
             <Handle />
@@ -176,7 +194,7 @@ export function Workbench() {
       )}
       <StatusBar />
       {repoId && <CommandPalette repoId={repoId} />}
-      {adding && <AddRepoDialog onClose={() => setAdding(false)} />}
+      {adding && <AddRepoDialog initial="github" onClose={() => setAdding(false)} />}
     </div>
   );
 }
