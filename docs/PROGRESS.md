@@ -90,6 +90,7 @@ Legend: ✅ done & tested · 🟡 implemented, not yet verified with real servic
 - Sandbox is process-level isolation, not a container — do not run untrusted repos on a shared server yet
 
 ## Version history
+- **v6** — Repository management (GitHub OAuth, URL for GitHub/GitLab/Bitbucket, ZIP; branches, commits, checkout; stats dashboard) and a code-intelligence engine (Python `ast` + Tree-sitter for 8 languages; symbols, imports, APIs, models, tests; call/module/inheritance graphs; impact analysis) with incremental indexing (per-file hash cache + embedding cache). 104 tests.
 - **v5** — Next.js IDE frontend (Monaco, Zustand, TanStack Query); backend adds live agent stream (SSE), symbols, text search, git status/diff/discard/commit, restricted terminal, save-file; `copy_local` recursion fix
 - **v4** — Architecture, review, multi-file changes, test generation, GitHub PRs, modular frontend, 40 tests
 - **v3** — Web UI at `/`, more retrieval priors (imports, backend/frontend, HTTP method), 30 tests
