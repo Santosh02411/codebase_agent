@@ -5,7 +5,7 @@ from typing import Callable
 
 Emit = Callable[[dict], None]
 NODES = ("analyze_query", "retrieve", "analyze", "generate_fix", "verify", "respond")
-TOOLS = ("search_code", "related", "read_file", "find_symbol", "get_dependencies", "list_tree", "run_tests")
+TOOLS = ("search_code", "related", "read_file", "find_symbol", "get_dependencies", "list_tree", "run_tests", "callers", "callees", "impact")
 
 
 def _args(name: str, a: tuple, k: dict) -> str:
@@ -17,6 +17,10 @@ def _summary(name: str, res) -> tuple[str, list[dict]]:
     if name in ("search_code", "related", "find_symbol"):
         hits = [{"file": h["file"], "lines": f"{h['start']}-{h['end']}", "symbol": h["qualname"]} for h in res]
         return f"{len(res)} result{'s' * (len(res) != 1)}", hits
+    if name in ("callers", "callees"):
+        return f"{len(res)} edge{'s' * (len(res) != 1)}", [{"file": h["file"], "lines": f"{h['start']}-{h['end']}", "symbol": h.get("caller") or h.get("callee", "")} for h in res]
+    if name == "impact":
+        return f"{len(res['dependents'])} dependent files, {len(res['tests'])} tests", []
     if name == "read_file":
         return f"{len(str(res).splitlines())} lines", []
     if name == "run_tests":

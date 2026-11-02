@@ -4,9 +4,7 @@ import re
 from pathlib import Path
 
 from .ingest import MAX_BYTES
-
-SYMBOL_KINDS = {"function", "method", "class"}
-
+from .intel.model import SYMBOL_KINDS
 
 def grep(root: Path, files: list[str], query: str, regex: bool = False, case: bool = False,
          limit: int = 300) -> dict:
@@ -42,14 +40,15 @@ def grep(root: Path, files: list[str], query: str, regex: bool = False, case: bo
 
 
 def symbols(index, path: str | None = None, q: str | None = None, limit: int = 200) -> list[dict]:
+    """Functions, methods, classes, interfaces, structs, enums and traits (variables excluded)."""
     out = []
     needle = (q or "").lower()
-    for c in index.chunks:
-        if c.kind not in SYMBOL_KINDS or (path and c.file != path):
+    for s in index.graph.symbols.values():
+        if s.kind not in SYMBOL_KINDS or (path and s.file != path):
             continue
-        if needle and needle not in c.qualname.lower():
+        if needle and needle not in s.qualname.lower():
             continue
-        out.append({"name": c.name, "qualname": c.qualname, "kind": c.kind, "file": c.file,
-                    "start": c.start, "end": c.end, "route": c.route})
-    out.sort(key=lambda s: (s["file"], s["start"]) if path else (s["name"].lower(), s["file"]))
+        out.append({"id": s.id, "name": s.name, "qualname": s.qualname, "kind": s.kind, "file": s.file, "start": s.start, "end": s.end,
+                    "route": s.route, "signature": s.signature, "doc": s.doc, "parent": s.parent})
+    out.sort(key=lambda x: (x["file"], x["start"]) if path else (x["name"].lower(), x["file"]))
     return out[:limit]

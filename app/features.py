@@ -5,7 +5,7 @@ import ast
 import re
 
 from . import patching, sandbox
-from .agent.nodes import SYSTEM, format_context
+from .agent.nodes import SYSTEM, format_context, format_relations
 
 SCHEMA = ('Return JSON: {"edits": [{"file": "path", "search": "exact existing text occurring exactly once in that file", '
           '"replace": "new text"}], "new_files": [{"path": "new/file.py", "content": "full file text"}], '
@@ -135,7 +135,7 @@ def _change(llm, tools, s, task: str, head: str, queries: list[str], verify: boo
     feedback = ""
     status = "no_change"
     for attempt in range(1, s.max_fix_attempts + 1):
-        res = llm.json(task, SYSTEM, f"{head}\n\n{extra}Relevant code:\n{format_context(ctx)}\n{feedback}\n{SCHEMA}", hints={})
+        res = llm.json(task, SYSTEM, f"{head}\n\n{extra}Relevant code:\n{format_context(ctx)}{format_relations(tools, ctx)}\n{feedback}\n{SCHEMA}", hints={})
         try:
             plan = patching.plan_changes(tools.root, res.get("edits"), res.get("new_files"))
         except ValueError as e:

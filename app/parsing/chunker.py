@@ -22,6 +22,9 @@ class Chunk:
     language: str
     calls: list[str] = field(default_factory=list)
     route: str = ""  # e.g. "POST /deliveries" for HTTP handlers
+    symbol_id: str = ""   # id of the code-intelligence Symbol this chunk was cut from
+    signature: str = ""
+    doc: str = ""
 
 
 def _calls(node: ast.AST) -> list[str]:

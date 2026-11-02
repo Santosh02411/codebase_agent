@@ -10,6 +10,12 @@ SYSTEM = ("You are a senior software engineer analysing a code repository. "
           "Only make claims the provided code supports. Prefer minimal, targeted fixes.")
 
 
+def format_relations(tools, chunks: list[dict], limit: int = 8) -> str:
+    """How the retrieved code connects (calls / called-by / inheritance), from the repository's call graph."""
+    lines = [r for r in (tools.relations(c["id"]) for c in chunks[:limit]) if r]
+    return ("\n\nCode relationships (from the call graph):\n" + "\n".join(f"- {l}" for l in lines)) if lines else ""
+
+
 def format_context(chunks: list[dict], max_chars: int = 3500) -> str:
     parts = []
     for c in chunks:
@@ -57,7 +63,7 @@ class AgentRuntime:
                 "steps": log(st, "retrieve", msg, count=len(found))}
 
     def analyze(self, st: AgentState) -> dict:
-        prompt = (f"Question:\n{st['question']}\n\nRetrieved code:\n{format_context(st['context'])}\n\n"
+        prompt = (f"Question:\n{st['question']}\n\nRetrieved code:\n{format_context(st['context'])}{format_relations(self.tools, st['context'])}\n\n"
                   'Return JSON: {"need_more": true only if essential code is missing, "follow_up_queries": [..], '
                   '"answer": "explanation grounded in the code", "root_cause": "if this is a bug", '
                   '"affected_file": "path", "affected_function": "name"}')
@@ -73,7 +79,7 @@ class AgentRuntime:
         if st["test_after"] and st["test_after"]["status"] in ("failed", "error"):
             feedback = f"\nYour previous patch FAILED the tests:\n{st['test_after']['output'][-1500:]}\nPrevious edit: {st['edit']}\n"
         prompt = (f"Question / error report:\n{st['question']}\n\nAnalysis: {st['analysis']}\n{feedback}\n"
-                  f"Retrieved code:\n{format_context(st['context'])}\n\n"
+                  f"Retrieved code:\n{format_context(st['context'])}{format_relations(self.tools, st['context'])}\n\n"
                   'Return JSON with ONE minimal edit: {"file": "path", "search": "exact existing text that occurs '
                   'exactly once in the file (keep indentation)", "replace": "new text", "explanation": "why"}')
         edit = self.llm.json("generate_fix", SYSTEM, prompt, hints={})

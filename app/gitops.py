@@ -15,9 +15,16 @@ class GitError(ValueError):
     pass
 
 
-def _git(root: Path, *args: str, timeout: int = 60, check: bool = True) -> subprocess.CompletedProcess:
+def net_env(auth_header: str | None) -> dict[str, str]:
+    """Pass an HTTP auth header to git through the environment (never on the command line or in .git/config)."""
+    if not auth_header:
+        return {}
+    return {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "http.extraHeader", "GIT_CONFIG_VALUE_0": auth_header}
+
+
+def _git(root: Path, *args: str, timeout: int = 60, check: bool = True, extra_env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
     try:
-        env = {**os.environ, "GIT_PAGER": "cat", "GIT_TERMINAL_PROMPT": "0"}
+        env = {**os.environ, "GIT_PAGER": "cat", "GIT_TERMINAL_PROMPT": "0", **(extra_env or {})}
         r = subprocess.run(["git", *IDENT, "-C", str(root), *args], capture_output=True, text=True, timeout=timeout, env=env)
     except FileNotFoundError:
         raise GitError("git is not installed on the server")
@@ -103,3 +110,129 @@ def commit(root: Path, message: str) -> dict:
         raise GitError((r.stdout + r.stderr).strip()[:300] or "nothing to commit")
     sha = _git(root, "rev-parse", "--short", "HEAD").stdout.strip()
     return {"sha": sha}
+
+
+# ---- branches, commits, checkout ---------------------------------------------------------------------
+_REF = __import__("re").compile(r"^[A-Za-z0-9_][A-Za-z0-9_./~^@{}\-]*$")
+
+
+def _check_ref(ref: str) -> str:
+    if not ref or not _REF.match(ref) or ".." in ref or ref.endswith(".lock"):
+        raise GitError(f"invalid branch or commit: {ref!r}")
+    return ref
+
+
+def head_info(root: Path) -> dict:
+    if not available() or not (root / ".git").exists():
+        return {"branch": "", "commit": "", "detached": False}
+    branch = _git(root, "rev-parse", "--abbrev-ref", "HEAD", check=False).stdout.strip()
+    sha = _git(root, "rev-parse", "--short", "HEAD", check=False).stdout.strip()
+    return {"branch": "" if branch == "HEAD" else branch, "commit": sha, "detached": branch == "HEAD"}
+
+
+def is_shallow(root: Path) -> bool:
+    return _git(root, "rev-parse", "--is-shallow-repository", check=False).stdout.strip() == "true"
+
+
+def branches(root: Path) -> dict:
+    """Local and remote branches (remote ones can be checked out; they become local tracking branches)."""
+    ensure_repo(root)
+    fmt = "%(refname)|%(objectname:short)|%(committerdate:iso8601-strict)|%(subject)"
+    out = _git(root, "for-each-ref", f"--format={fmt}", "refs/heads", "refs/remotes").stdout
+    head = head_info(root)
+    local: dict[str, dict] = {}
+    remote: dict[str, dict] = {}
+    for line in out.splitlines():
+        ref, sha, date, subject = (line.split("|", 3) + ["", "", ""])[:4]
+        if ref.startswith("refs/heads/"):
+            name = ref[len("refs/heads/"):]
+            local[name] = {"name": name, "sha": sha, "date": date, "subject": subject, "current": name == head["branch"], "remote": False}
+        elif ref.startswith("refs/remotes/"):
+            full = ref[len("refs/remotes/"):]
+            remote_name, _, name = full.partition("/")
+            if name and name != "HEAD":
+                remote[name] = {"name": name, "sha": sha, "date": date, "subject": subject, "current": False, "remote": True, "origin": remote_name}
+    items = list(local.values()) + [r for n, r in remote.items() if n not in local]
+    default = ""
+    r = _git(root, "symbolic-ref", "--short", "refs/remotes/origin/HEAD", check=False)
+    if r.returncode == 0:
+        default = r.stdout.strip().split("/", 1)[-1]
+    if not default:
+        default = next((n for n in ("main", "master", "develop") if any(i["name"] == n for i in items)), "")
+    return {"current": head["branch"], "commit": head["commit"], "detached": head["detached"], "default": default,
+            "branches": sorted(items, key=lambda b: (not b["current"], b["name"] != default, b["name"])), "shallow": is_shallow(root)}
+
+
+def commits(root: Path, ref: str | None = None, limit: int = 30, skip: int = 0) -> list[dict]:
+    ensure_repo(root)
+    args = ["log", f"--max-count={min(max(limit, 1), 200)}", f"--skip={max(skip, 0)}", "--date=iso-strict",
+            "--format=%H%x1f%h%x1f%an%x1f%ad%x1f%s"]
+    if ref:
+        args.append(_check_ref(ref))
+    r = _git(root, *args, check=False)
+    if r.returncode != 0:
+        raise GitError((r.stderr or "git log failed").strip()[:300])
+    out = []
+    for line in r.stdout.splitlines():
+        parts = line.split("\x1f")
+        if len(parts) == 5:
+            out.append({"sha": parts[0], "short": parts[1], "author": parts[2], "date": parts[3], "subject": parts[4]})
+    return out
+
+
+def checkout(root: Path, ref: str, force: bool = False) -> dict:
+    """Switch the working copy to a branch (remote branches get a local tracking branch) or a commit (detached)."""
+    _check_ref(ref)
+    ensure_repo(root)
+    dirty = status(root)["files"]
+    if dirty and not force:
+        raise GitError(f"{len(dirty)} file(s) have uncommitted changes. Commit or discard them first, or switch with discard enabled.")
+    if force and dirty:
+        _git(root, "reset", "--hard", "-q")
+        _git(root, "clean", "-fdq")
+    if _git(root, "show-ref", "--verify", "--quiet", f"refs/heads/{ref}", check=False).returncode == 0:
+        _git(root, "checkout", "-q", ref)
+    elif _git(root, "show-ref", "--verify", "--quiet", f"refs/remotes/origin/{ref}", check=False).returncode == 0:
+        _git(root, "checkout", "-q", "-B", ref, f"origin/{ref}")
+    else:
+        sha = _git(root, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}", check=False)
+        if sha.returncode != 0:
+            raise GitError(f"unknown branch or commit: {ref}")
+        _git(root, "checkout", "-q", "--detach", sha.stdout.strip())
+    return head_info(root)
+
+
+def fetch(root: Path, deepen: int = 50, auth_header: str | None = None) -> dict:
+    """Download more history (shallow clones) or new remote branches."""
+    ensure_repo(root)
+    env = net_env(auth_header)
+    if not (root / ".git").exists() or _git(root, "remote", check=False).stdout.strip() == "":
+        raise GitError("this project has no remote to fetch from (it was uploaded or copied)")
+    args = ["fetch", "--prune", "-q"]
+    if is_shallow(root):
+        args.append(f"--deepen={min(max(deepen, 1), 1000)}")
+    r = _git(root, *args, "origin", check=False, timeout=300, extra_env=env)
+    if r.returncode != 0:
+        raise GitError((r.stderr or "git fetch failed").strip()[:300])
+    return {"shallow": is_shallow(root)}
+
+
+def ls_remote_heads(url: str, auth_header: str | None = None) -> dict:
+    """Branch names of a remote repository, without cloning it."""
+    try:
+        r = subprocess.run(["git", "ls-remote", "--symref", url, "HEAD", "refs/heads/*"], capture_output=True, text=True, timeout=60,
+                           env={**os.environ, "GIT_TERMINAL_PROMPT": "0", **net_env(auth_header)})
+    except FileNotFoundError:
+        raise GitError("git is not installed on the server")
+    except subprocess.TimeoutExpired:
+        raise GitError("timed out contacting the repository host")
+    if r.returncode != 0:
+        msg = (r.stderr or "").strip().splitlines()[-1:] or ["could not reach repository"]
+        raise GitError(msg[0][:200])
+    names, default = [], ""
+    for line in r.stdout.splitlines():
+        if line.startswith("ref: refs/heads/"):
+            default = line.split()[1][len("refs/heads/"):]
+        elif "\trefs/heads/" in line:
+            names.append(line.split("\trefs/heads/", 1)[1])
+    return {"branches": sorted(names, key=lambda n: (n != default, n)), "default": default or (names[0] if names else "")}

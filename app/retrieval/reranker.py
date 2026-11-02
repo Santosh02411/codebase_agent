@@ -10,7 +10,8 @@ _TEST_WORDS = {"test", "tests", "pytest", "spec", "fixture", "fixtures"}
 _CFG_WORDS = {"config", "configuration", "docker", "dockerfile", "deploy", "deployment", "ci", "pipeline",
               "dependency", "dependencies", "requirements", "package", "settings", "env", "workflow"}
 _ENDPOINT_WORDS = {"endpoint", "route", "api", "request", "handled", "handler", "http", "500", "handl"}
-_KIND_W = {"function": 1.0, "method": 1.0, "class": 0.9, "module": 0.7, "block": 0.55}
+_KIND_W = {"function": 1.0, "method": 1.0, "class": 0.9, "interface": 0.9, "struct": 0.9, "trait": 0.9, "enum": 0.8, "type": 0.8,
+           "module": 0.7, "block": 0.55}
 _BACKEND_WORDS = {"backend", "endpoint", "api", "route", "server", "database", "db", "model", "service"}
 _FRONTEND_WORDS = {"ui", "page", "component", "screen", "button", "frontend", "react", "view", "mobile"}
 _METHODS = {"get", "post", "put", "patch", "delete"}

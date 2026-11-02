@@ -43,16 +43,57 @@ class RepoTools:
         return "\n".join(t[:max_lines]) + (f"\n... (+{len(t) - max_lines} more files)" if len(t) > max_lines else "")
 
     def get_dependencies(self, path: str | None = None) -> dict:
+        """Declared dependencies of the repo, or for one file: what it imports, who imports it, external packages."""
         if path is None:
             return self.index.deps
-        mods = self.index.imports.get(path, [])
-        tree = set(self.index.tree)
-        internal = []
-        for m in mods:
-            for cand in (m.replace(".", "/") + ".py", m.replace(".", "/") + "/__init__.py"):
-                if cand in tree:
-                    internal.append(cand)
-        return {"imports": mods, "internal_files": internal}
+        g = self.index.graph
+        f = self.index.facts.get(path)
+        return {"imports": sorted({i.module for i in f.imports if i.module}) if f else self.index.imports.get(path, []),
+                "internal_files": sorted(g.imports_of.get(path, ())), "imported_by": sorted(g.imported_by.get(path, ())),
+                "external": sorted(g.external.get(path, ()))}
+
+    def _symbols(self, name: str):
+        g = self.index.graph
+        return [g.symbols[name]] if name in g.symbols else g.find(name)
+
+    def callers(self, name: str) -> list[dict]:
+        """Who calls this function/method (resolved through imports and class hierarchy)."""
+        out = []
+        for s in self._symbols(name)[:3]:
+            for c, conf in self.index.graph.callers(s.id):
+                out.append({"symbol": s.qualname, "caller": c.qualname, "file": c.file, "start": c.start, "end": c.end, "confidence": conf})
+        return out
+
+    def callees(self, name: str) -> list[dict]:
+        out = []
+        for s in self._symbols(name)[:3]:
+            for c, conf in self.index.graph.callees(s.id):
+                out.append({"symbol": s.qualname, "callee": c.qualname, "file": c.file, "start": c.start, "end": c.end, "confidence": conf})
+        return out
+
+    def impact(self, path: str) -> dict:
+        """Files that would be affected by changing `path` (reverse import graph) and the tests among them."""
+        return self.index.graph.impact(path)
+
+    def relations(self, chunk_id: int) -> str:
+        """One-line summary of how a chunk connects to the rest of the code (for prompts)."""
+        c = self.index.chunks[chunk_id]
+        if not c.symbol_id:
+            return ""
+        g = self.index.graph
+        s = g.symbols[c.symbol_id]
+        parts = []
+        if s.bases:
+            parts.append("extends " + ", ".join(s.bases[:4]))
+        callees = [x.qualname for x, _ in g.callees(s.id)][:6]
+        callers = [x.qualname for x, _ in g.callers(s.id)][:6]
+        if callees:
+            parts.append("calls " + ", ".join(callees))
+        if callers:
+            parts.append("called by " + ", ".join(callers))
+        if s.kind in ("class", "interface", "struct", "trait") and g.derived.get(s.id):
+            parts.append("subclassed by " + ", ".join(g.symbols[i].qualname for i in g.derived[s.id][:4]))
+        return f"{c.file}::{c.qualname}: " + "; ".join(parts) if parts else ""
 
     def run_tests(self) -> dict:
         work = sandbox.copy_repo(self.root)

@@ -12,11 +12,12 @@ from typing import Literal
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import features, github_pr, gitops, instrument, patching, terminal, textsearch
+from . import auth as auth_mod, features, github_pr, gitops, instrument, patching, providers, terminal, textsearch
+from .intel.ts_core import available_grammars
 from .agent.graph import run_agent
 from .agent.nodes import AgentRuntime
 from .agent.state import new_state
@@ -44,8 +45,9 @@ def service() -> RepoService:
 
 
 class RepoIn(BaseModel):
-    source: str  # GitHub https URL (or local path when ALLOW_LOCAL_PATHS=true)
+    source: str  # https repository URL (GitHub / GitLab / Bitbucket) or a local path when ALLOW_LOCAL_PATHS=true
     name: str | None = None
+    branch: str | None = None  # branch to analyse (default: the repository's default branch)
 
 
 class SearchIn(BaseModel):
@@ -108,14 +110,15 @@ def ui():
 def health():
     s = get_settings()
     return {"status": "ok", "llm_provider": s.llm_provider, "embedding_provider": s.embedding_provider,
-            "llm_model": s.llm_model, "github_configured": bool(s.github_token), "git_available": gitops.available(),
-            "allow_local_paths": s.allow_local_paths}
+            "llm_model": s.llm_model, "github_configured": bool(s.github_token or service().auth.token("github")),
+            "git_available": gitops.available(), "allow_local_paths": s.allow_local_paths,
+            "github_oauth": auth_mod.oauth_configured(s), "grammars": available_grammars()}
 
 
 @app.post("/repositories")
 def add_repository(body: RepoIn):
     try:
-        return service().add(body.source, body.name)
+        return service().add(body.source, body.name, body.branch)
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -136,7 +139,10 @@ def list_repositories():
 @app.post("/repositories/{repo_id}/index")
 def reindex(repo_id: str):
     _repo(repo_id)
-    return service().reindex(repo_id)
+    try:
+        return service().reindex(repo_id)
+    except ValueError as e:  # already being indexed
+        raise HTTPException(409, str(e))
 
 
 @app.get("/repositories/{repo_id}/tree")
@@ -298,7 +304,7 @@ def create_pr(body: PRIn):
     try:
         for path in body.files:
             safe_path(root, path)
-        return github_pr.create_pr(meta["source"], get_settings().github_token, body.files, body.title, body.body)
+        return github_pr.create_pr(meta["source"], service().auth.token("github") or get_settings().github_token, body.files, body.title, body.body)
     except ValueError as e:
         raise HTTPException(400, str(e))
     except Exception as e:
@@ -463,3 +469,182 @@ def agent_stream(body: StreamIn):
 
     return StreamingResponse(gen(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+# ---- v6: repository management + code intelligence ------------------------------------------------------
+class PreviewIn(BaseModel):
+    source: str
+
+
+@app.post("/repositories/preview")
+def preview_repository(body: PreviewIn):
+    """Branches of a remote repository, so you can pick one before importing."""
+    try:
+        return service().preview(body.source)
+    except (ValueError, gitops.GitError) as e:
+        raise HTTPException(400, str(e))
+
+
+@app.get("/indexing")
+def active_indexing():
+    """Repositories being indexed right now (lets the UI show progress for an import that hasn't returned yet)."""
+    return {rid: st for rid, st in service().all_status().items() if st.get("state") in ("indexing", "error")}
+
+
+@app.get("/repositories/{repo_id}/status")
+def repo_status(repo_id: str):
+    """Indexing progress (phase, done/total). Safe to poll while an import or re-index request is still running."""
+    st = service().status_of(repo_id)
+    if st["state"] == "unknown":
+        raise HTTPException(404, f"unknown repository: {repo_id}")
+    return st
+
+
+@app.get("/repositories/{repo_id}/stats")
+def repo_stats_endpoint(repo_id: str):
+    _repo(repo_id)
+    return service().stats(repo_id)
+
+
+@app.get("/repositories/{repo_id}/branches")
+def repo_branches(repo_id: str):
+    _repo(repo_id)
+    return _git_call(service().branches, repo_id)
+
+
+@app.get("/repositories/{repo_id}/commits")
+def repo_commits(repo_id: str, ref: str | None = None, limit: int = 30, skip: int = 0):
+    _repo(repo_id)
+    return _git_call(service().commits, repo_id, ref, limit, skip)
+
+
+class CheckoutIn(BaseModel):
+    ref: str
+    force: bool = False  # discard uncommitted changes in the project copy
+
+
+@app.post("/repositories/{repo_id}/checkout")
+def repo_checkout(repo_id: str, body: CheckoutIn):
+    """Switch to another branch or commit and re-index only the files that differ."""
+    _repo(repo_id)
+    try:
+        return service().checkout(repo_id, body.ref, body.force)
+    except gitops.GitError as e:
+        raise HTTPException(409 if "uncommitted" in str(e) else 400, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+class FetchIn(BaseModel):
+    deepen: int = 50
+
+
+@app.post("/repositories/{repo_id}/fetch")
+def repo_fetch(repo_id: str, body: FetchIn | None = None):
+    """Load more commit history / new remote branches."""
+    _repo(repo_id)
+    return _git_call(service().fetch, repo_id, (body or FetchIn()).deepen)
+
+
+@app.get("/repositories/{repo_id}/symbol")
+def symbol_detail(repo_id: str, id: str):
+    """One symbol with its signature, docs, callers, callees and inheritance."""
+    g = _repo(repo_id)[2].graph
+    s = g.symbols.get(id)
+    if not s:
+        raise HTTPException(404, f"unknown symbol: {id}")
+
+    def ref(x, conf=""):
+        return {"id": x.id, "qualname": x.qualname, "kind": x.kind, "file": x.file, "start": x.start, "end": x.end, "confidence": conf}
+    return {"id": s.id, "name": s.name, "qualname": s.qualname, "kind": s.kind, "file": s.file, "start": s.start, "end": s.end,
+            "language": s.language, "signature": s.signature, "doc": s.doc, "route": s.route, "decorators": s.decorators, "tags": s.tags,
+            "bases": s.bases, "extra": s.extra, "exported": s.exported,
+            "callers": [ref(x, c) for x, c in g.callers(s.id)], "callees": [ref(x, c) for x, c in g.callees(s.id)],
+            "base_symbols": [ref(g.symbols[b]) for b in g.base_ids.get(s.id, [])], "derived": [ref(g.symbols[d]) for d in g.derived.get(s.id, [])],
+            "unresolved_calls": [c for c in s.calls if c.split(".")[-1] not in {x.name for x, _ in g.callees(s.id)}][:20]}
+
+
+@app.get("/repositories/{repo_id}/graph/calls")
+def graph_calls(repo_id: str, symbol: str, depth: int = 2, direction: str = "both"):
+    g = _repo(repo_id)[2].graph
+    if symbol not in g.symbols:
+        raise HTTPException(404, f"unknown symbol: {symbol}")
+    return g.call_subgraph(symbol, min(max(depth, 1), 4), direction if direction in ("both", "callers", "callees") else "both")
+
+
+@app.get("/repositories/{repo_id}/graph/modules")
+def graph_modules(repo_id: str, path: str | None = None, depth: int = 1, direction: str = "both"):
+    """Import graph around one file, or (no `path`) an overview of the whole repository."""
+    index = _repo(repo_id)[2]
+    if not path:
+        return index.graph.modules_overview()
+    if path not in index.facts:
+        raise HTTPException(404, f"unknown file: {path}")
+    return index.graph.module_subgraph(path, min(max(depth, 1), 4), direction if direction in ("both", "imports", "imported_by") else "both")
+
+
+@app.get("/repositories/{repo_id}/impact")
+def impact(repo_id: str, path: str, depth: int = 3):
+    index = _repo(repo_id)[2]
+    if path not in index.facts:
+        raise HTTPException(404, f"unknown file: {path}")
+    return index.graph.impact(path, min(max(depth, 1), 6))
+
+
+# ---- authentication / provider connections --------------------------------------------------------------
+@app.get("/auth/status")
+def auth_status():
+    s, a = get_settings(), service().auth
+    gh = a.get("github") or {}
+    return {"github": {"oauth_configured": auth_mod.oauth_configured(s), "connected": bool(gh.get("token")),
+                       "user": {k: gh.get(k, "") for k in ("login", "name", "avatar")} if gh.get("token") else None,
+                       "token_in_env": bool(s.github_token)},
+            "gitlab": {"token_in_env": bool(s.gitlab_token), "oauth": "planned"},
+            "bitbucket": {"token_in_env": bool(s.bitbucket_username and s.bitbucket_app_password), "oauth": "planned"}}
+
+
+@app.get("/auth/github/login")
+def github_login():
+    s = get_settings()
+    try:
+        return RedirectResponse(auth_mod.login_url(s))
+    except ValueError as e:
+        return RedirectResponse(f"{s.frontend_url}/?auth_error={str(e)[:120]}")
+
+
+@app.get("/auth/github/callback")
+def github_callback(code: str = "", state: str = "", error: str = ""):
+    s = get_settings()
+    back = s.frontend_url
+    if error:
+        return RedirectResponse(f"{back}/?auth_error={error[:80]}")
+    if not code or not auth_mod.consume_state(state):
+        return RedirectResponse(f"{back}/?auth_error=invalid_or_expired_state")
+    try:
+        token = auth_mod.exchange_code(s, code)
+        user = auth_mod.fetch_user(token)
+    except (ValueError, PermissionError) as e:
+        return RedirectResponse(f"{back}/?auth_error={str(e)[:120]}")
+    service().auth.set("github", {"token": token, **user, "connected_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
+    return RedirectResponse(f"{back}/?connected=github")
+
+
+@app.post("/auth/github/logout")
+def github_logout():
+    service().auth.delete("github")
+    return {"connected": False}
+
+
+@app.get("/github/repos")
+def github_repos(q: str = "", page: int = 1):
+    """Repositories the connected GitHub account can access (including private ones)."""
+    token = service().auth.token("github") or get_settings().github_token
+    if not token:
+        raise HTTPException(401, "connect GitHub first")
+    try:
+        return auth_mod.list_repos(token, q, max(page, 1))
+    except PermissionError as e:
+        service().auth.delete("github")
+        raise HTTPException(401, str(e))
+    except ValueError as e:
+        raise HTTPException(502, str(e))
