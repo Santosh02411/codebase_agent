@@ -1,0 +1,13 @@
+{"_meta": {"name": "delivery_sync", "repo": "tests/fixtures/delivery_sync", "description": "Smoke benchmark on the tiny delivery-service fixture (5 functions, 8 files). Too small to separate strong configurations; use it to check the pipeline works."}}
+{"id": "d01", "question": "Where is the delivery ETA calculated?", "relevant": [{"file": "services/eta.py", "symbol": "calculate_delivery_eta"}], "tags": ["locate"]}
+{"id": "d02", "question": "Why does creating a delivery without a speed crash?", "relevant": [{"file": "services/eta.py", "symbol": "calculate_delivery_eta"}, {"file": "delivery_app.py", "symbol": "create_delivery"}], "tags": ["debug", "multi"]}
+{"id": "d03", "question": "How is the payload validated when creating a delivery?", "relevant": [{"file": "services/validation.py", "symbol": "validate_payload"}], "tags": ["locate"]}
+{"id": "d04", "question": "Where is authentication implemented?", "relevant": [{"file": "auth.py", "symbol": "authenticate_user"}], "tags": ["locate"]}
+{"id": "d05", "question": "Which function handles the endpoint that registers a new delivery?", "relevant": [{"file": "delivery_app.py", "symbol": "create_delivery"}], "tags": ["paraphrase"]}
+{"id": "d06", "question": "What default speed is assumed when the client does not send one?", "relevant": [{"file": "services/eta.py"}], "tags": ["paraphrase", "file-level"]}
+{"id": "d07", "question": "Which tests cover registering a delivery with the fallback speed?", "relevant": [{"file": "tests/test_delivery.py", "symbol": "test_create_delivery_default_speed"}], "tags": ["tests"]}
+{"id": "d08", "question": "What happens when the request has no customer?", "relevant": [{"file": "services/validation.py", "symbol": "validate_payload"}, {"file": "tests/test_delivery.py", "symbol": "test_missing_customer"}], "tags": ["multi"]}
+{"id": "d09", "question": "What is this project and which bug does it contain on purpose?", "relevant": [{"file": "README.md"}], "tags": ["docs", "file-level"]}
+{"id": "d10", "question": "Which python packages does the service depend on?", "relevant": [{"file": "requirements.txt"}], "tags": ["config", "file-level"]}
+{"id": "d11", "question": "Check whether the caller's credentials are valid", "relevant": [{"file": "auth.py", "symbol": "authenticate_user"}], "tags": ["paraphrase"]}
+{"id": "d12", "question": "Work out how many minutes a courier needs for a given distance", "relevant": [{"file": "services/eta.py", "symbol": "calculate_delivery_eta"}], "tags": ["paraphrase"]}

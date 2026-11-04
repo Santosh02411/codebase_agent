@@ -1,0 +1,80 @@
+[
+ {
+  "name": "bm25-only",
+  "embedder": "hash",
+  "mode": "keyword"
+ },
+ {
+  "name": "hybrid wv=0.25",
+  "embedder": "hash",
+  "mode": "hybrid",
+  "vector_weight": 0.25
+ },
+ {
+  "name": "hybrid wv=0.5",
+  "embedder": "hash",
+  "mode": "hybrid",
+  "vector_weight": 0.5
+ },
+ {
+  "name": "hybrid wv=1.0",
+  "embedder": "hash",
+  "mode": "hybrid",
+  "vector_weight": 1.0
+ },
+ {
+  "name": "hybrid+heuristic wv=0.25 pool=10",
+  "embedder": "hash",
+  "mode": "hybrid",
+  "reranker": "heuristic",
+  "vector_weight": 0.25,
+  "pool": 10
+ },
+ {
+  "name": "hybrid+heuristic wv=0.25 pool=30",
+  "embedder": "hash",
+  "mode": "hybrid",
+  "reranker": "heuristic",
+  "vector_weight": 0.25,
+  "pool": 30
+ },
+ {
+  "name": "hybrid+heuristic wv=0.25 pool=50",
+  "embedder": "hash",
+  "mode": "hybrid",
+  "reranker": "heuristic",
+  "vector_weight": 0.25,
+  "pool": 50
+ },
+ {
+  "name": "hybrid+heuristic wv=1.0 pool=10",
+  "embedder": "hash",
+  "mode": "hybrid",
+  "reranker": "heuristic",
+  "vector_weight": 1.0,
+  "pool": 10
+ },
+ {
+  "name": "hybrid+heuristic wv=1.0 pool=30",
+  "embedder": "hash",
+  "mode": "hybrid",
+  "reranker": "heuristic",
+  "vector_weight": 1.0,
+  "pool": 30
+ },
+ {
+  "name": "hybrid+heuristic wv=1.0 pool=50",
+  "embedder": "hash",
+  "mode": "hybrid",
+  "reranker": "heuristic",
+  "vector_weight": 1.0,
+  "pool": 50
+ },
+ {
+  "name": "bm25+heuristic pool=30",
+  "embedder": "hash",
+  "mode": "keyword",
+  "reranker": "heuristic",
+  "pool": 30
+ }
+]
