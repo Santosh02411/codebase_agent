@@ -3,27 +3,31 @@ from pathlib import Path
 
 from .. import sandbox
 from ..retrieval.index import CodeIndex
-from ..retrieval.reranker import rerank
 from ..utils import safe_path
 
 
-def chunk_dict(c, score: float | None = None, via: str = "search") -> dict:
+def chunk_dict(c, score: float | None = None, via: str = "search", why: str = "") -> dict:
     d = {"id": c.id, "file": c.file, "kind": c.kind, "name": c.name, "qualname": c.qualname,
          "start": c.start, "end": c.end, "text": c.text, "via": via, "route": c.route}
     if score is not None:
         d["score"] = round(float(score), 3)
+    if why:
+        d["why"] = why
     return d
 
 
 class RepoTools:
     """Tools the agent can call. Each is a plain method so they can also be exposed as LLM function-calls."""
 
-    def __init__(self, root: Path, index: CodeIndex, test_timeout: int = 120) -> None:
-        self.root, self.index, self.test_timeout = root, index, test_timeout
+    def __init__(self, root: Path, index: CodeIndex, test_timeout: int = 120, llm=None) -> None:
+        self.root, self.index, self.test_timeout, self.llm = root, index, test_timeout, llm
+        self.last_trace: dict = {}
 
     def search_code(self, query: str, k: int = 5, candidates: int = 20) -> list[dict]:
-        hits = rerank(self.index, query, self.index.search(query, k=candidates), top_n=k)
-        return [chunk_dict(c, s) for c, s in hits]
+        """Hybrid search (vectors + BM25, fused with RRF) -> rerank -> top-k chunks. `candidates` = fused pool size."""
+        r = self.index.retriever(llm=self.llm).retrieve(query, k=k, pool=max(candidates, k))
+        self.last_trace = r.trace
+        return [chunk_dict(h.chunk, h.score, why=h.why()) for h in r.hits]
 
     def related(self, chunk_id: int) -> list[dict]:
         c = self.index.chunks[chunk_id]

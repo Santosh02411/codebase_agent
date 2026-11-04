@@ -1,6 +1,7 @@
 from __future__ import annotations
 from .. import patching, sandbox
 from ..config import Settings
+from ..rag.context import CITATION_RULES, build_pack, extract_citations, render_blocks
 from ..llm import LLM
 from .state import AgentState, log
 from .tools import RepoTools
@@ -17,11 +18,8 @@ def format_relations(tools, chunks: list[dict], limit: int = 8) -> str:
 
 
 def format_context(chunks: list[dict], max_chars: int = 3500) -> str:
-    parts = []
-    for c in chunks:
-        route = f" route={c['route']}" if c.get("route") else ""
-        parts.append(f"### {c['file']}:{c['start']}-{c['end']} ({c['qualname']}){route} [{c['via']}]\n```\n{c['text'][:max_chars]}\n```")
-    return "\n\n".join(parts)
+    """Numbered code blocks: the numbers are the citation ids the model is told to use ([1] is chunks[0])."""
+    return render_blocks(chunks, max_chars)
 
 
 class AgentRuntime:
@@ -57,13 +55,13 @@ class AgentRuntime:
             for r in self.tools.related(h["id"]):
                 if r["id"] not in seen:
                     seen.add(r["id"]); found.append(r)
-        ctx = (ctx + found)[: self.s.max_context_chunks]
+        ctx = build_pack((ctx + found)[: self.s.max_context_chunks], self.s.context_token_budget).chunks()
         msg = "retrieved " + ", ".join(f"{c['file']}::{c['qualname']}" for c in found[:8]) if found else "no new chunks"
         return {"context": ctx, "queries": [], "retrieval_rounds": st["retrieval_rounds"] + 1,
                 "steps": log(st, "retrieve", msg, count=len(found))}
 
     def analyze(self, st: AgentState) -> dict:
-        prompt = (f"Question:\n{st['question']}\n\nRetrieved code:\n{format_context(st['context'])}{format_relations(self.tools, st['context'])}\n\n"
+        prompt = (f"Question:\n{st['question']}\n\nRetrieved code:\n{format_context(st['context'])}{format_relations(self.tools, st['context'])}\n\n{CITATION_RULES}\n\n"
                   'Return JSON: {"need_more": true only if essential code is missing, "follow_up_queries": [..], '
                   '"answer": "explanation grounded in the code", "root_cause": "if this is a bug", '
                   '"affected_file": "path", "affected_function": "name"}')
@@ -136,8 +134,11 @@ class AgentRuntime:
             else:
                 status = "no_fix"
                 parts.append(f"_No patch generated._ {st['fix_error']}".strip())
-        return {"answer": "\n\n".join(parts) or "No answer produced.", "status": status,
-                "steps": log(st, "respond", f"status={status}")}
+        answer = "\n\n".join(parts) or "No answer produced."
+        cites = extract_citations(f"{a.get('answer', '')} {a.get('root_cause', '')}", len(st["context"]))
+        note = f", cited {len(cites['cited'])}/{len(st['context'])} snippets" + (f", {len(cites['invalid'])} invalid citation(s)" if cites["invalid"] else "")
+        return {"answer": answer, "status": status, "citations": cites,
+                "steps": log(st, "respond", f"status={status}{note}")}
 
     # ---- routing -----------------------------------------------------------------------------
     def route(self, node: str, st: AgentState) -> str:

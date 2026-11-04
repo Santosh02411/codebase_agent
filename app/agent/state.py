@@ -13,6 +13,7 @@ class AgentState(TypedDict, total=False):
     retrieval_rounds: int
     need_more: bool
     analysis: dict
+    citations: dict        # {"cited": [1, 3], "invalid": []} markers the answer used, validated against the context
     edit: dict | None
     diff: str
     fix_error: str
