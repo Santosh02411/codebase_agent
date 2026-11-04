@@ -13,7 +13,13 @@ def _args(name: str, a: tuple, k: dict) -> str:
     return ", ".join(vals)[:160]
 
 
-def _summary(name: str, res) -> tuple[str, list[dict]]:
+def _summary(name: str, res, tools=None) -> tuple[str, list[dict]]:
+    if name == "search_code" and tools is not None and tools.last_trace:
+        t = tools.last_trace
+        legs = f"{t.get('vector_candidates', 0)} vector + {t.get('keyword_candidates', 0)} keyword"
+        text = (f"{t.get('mode')}: {legs} → {t.get('fused', 0)} fused → {t.get('reranker', 'no rerank')} → {len(res)} "
+                f"({t.get('total_ms', 0)} ms)") + (f" ⚠ {t['warnings'][0]}" if t.get("warnings") else "")
+        return text, [{"file": h["file"], "lines": f"{h['start']}-{h['end']}", "symbol": h["qualname"]} for h in res]
     if name in ("search_code", "related", "find_symbol"):
         hits = [{"file": h["file"], "lines": f"{h['start']}-{h['end']}", "symbol": h["qualname"]} for h in res]
         return f"{len(res)} result{'s' * (len(res) != 1)}", hits
@@ -42,7 +48,7 @@ def instrument(rt, llm, tools, emit: Emit) -> None:
                 emit({"type": "tool", "name": name, "args": label, "phase": "error", "error": str(e)[:200],
                       "ms": int((time.time() - t0) * 1000)})
                 raise
-            text, hits = _summary(name, res)
+            text, hits = _summary(name, res, tools)
             emit({"type": "tool", "name": name, "args": label, "phase": "end", "summary": text, "hits": hits,
                   "ms": int((time.time() - t0) * 1000)})
             return res

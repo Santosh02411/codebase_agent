@@ -1,4 +1,5 @@
 from __future__ import annotations
+import fnmatch
 import io
 import os
 import re
@@ -9,7 +10,7 @@ from pathlib import Path
 
 from . import gitops, providers
 from .intel.store import IndexBuilder
-from .retrieval.embeddings import get_embedder
+from .rag.embedders import get_embedder
 
 SKIP_DIRS = {".git", "node_modules", "venv", ".venv", "__pycache__", "dist", "build", ".next", ".idea",
              ".pytest_cache", ".mypy_cache", "site-packages", "target"}
@@ -19,18 +20,50 @@ TEXT_NAMES = {"Dockerfile", "requirements.txt", "Makefile", "pom.xml", "build.gr
 MAX_BYTES = 500_000
 
 
+IGNORE_FILE = ".codeagentignore"
+
+
+def load_ignore(root: Path) -> list[str]:
+    """Patterns from `<repo>/.codeagentignore` (one per line, `#` comments), gitignore-style:
+         eval/        a directory with that name at any depth      /eval/   only the top-level one
+         docs/old.md  a path                                       *.min.js a glob matched against the path or the file name"""
+    f = root / IGNORE_FILE
+    if not f.is_file():
+        return []
+    return [l.strip() for l in f.read_text(errors="ignore").splitlines() if l.strip() and not l.lstrip().startswith("#")]
+
+
+def is_ignored(rel: str, patterns: list[str]) -> bool:
+    name = rel.rsplit("/", 1)[-1]
+    for pat in patterns:
+        if pat.startswith("/"):                      # anchored to the repository root
+            anchored = pat[1:]
+            if rel == anchored.rstrip("/") or rel.startswith(anchored if anchored.endswith("/") else anchored + "/"):
+                return True
+        elif pat.endswith("/"):
+            if rel.startswith(pat) or f"/{pat}" in f"/{rel}":
+                return True
+        elif rel == pat or rel.startswith(pat + "/") or fnmatch.fnmatch(rel, pat) or fnmatch.fnmatch(name, pat):
+            return True
+    return False
+
+
 def iter_source_files(root: Path):
+    ignore = load_ignore(root)
     for dirpath, dirs, files in os.walk(root):
         dirs[:] = sorted(d for d in dirs if d not in SKIP_DIRS)
         for f in sorted(files):
             p = Path(dirpath) / f
-            if (p.suffix.lower() in TEXT_EXT or f in TEXT_NAMES) and p.stat().st_size <= MAX_BYTES:
-                yield p.relative_to(root).as_posix(), p
+            rel = p.relative_to(root).as_posix()
+            if (p.suffix.lower() in TEXT_EXT or f in TEXT_NAMES) and p.stat().st_size <= MAX_BYTES and not is_ignored(rel, ignore):
+                yield rel, p
 
 
-def build_index(root: Path, embedder=None, cache_dir: Path | None = None, progress=None):
-    """Parse every file into symbols + graphs and index it. With `cache_dir`, only changed files are reprocessed."""
-    return IndexBuilder(root, embedder or get_embedder(), cache_dir, progress).build()
+def build_index(root: Path, embedder=None, cache_dir: Path | None = None, progress=None, *, pg=None, repo_id: str = "",
+                repo_info: tuple[str, str] = ("", "")):
+    """Parse every file into symbols + graphs and index it. With `cache_dir` (files) or `pg` (PostgreSQL), only changed files
+    are reprocessed."""
+    return IndexBuilder(root, embedder or get_embedder(), cache_dir, progress, pg=pg, repo_id=repo_id, repo_info=repo_info).build()
 
 
 def clone_repo(url: str, dest: Path, branch: str | None = None, auth_header: str | None = None) -> None:

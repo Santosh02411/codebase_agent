@@ -18,6 +18,8 @@ from pydantic import BaseModel
 
 from . import auth as auth_mod, features, github_pr, gitops, instrument, patching, providers, terminal, textsearch
 from .intel.ts_core import available_grammars
+from .rag import experiments as exp_mod
+from .rag.embedders import get_embedder
 from .agent.graph import run_agent
 from .agent.nodes import AgentRuntime
 from .agent.state import new_state
@@ -76,12 +78,20 @@ def _repo(repo_id: str):
         raise HTTPException(404, f"unknown repository: {repo_id}")
 
 
+def _sources(ctx: list[dict], citations: dict | None) -> list[dict]:
+    """Retrieved snippets as citable sources: `cite` is the [n] the model saw, `cited` says whether the answer used it (cited first)."""
+    cited = set((citations or {}).get("cited", []))
+    out = [{"file": c["file"], "lines": f"{c['start']}-{c['end']}", "symbol": c["qualname"], "cite": n, "cited": n in cited}
+           for n, c in enumerate(ctx, 1)]
+    return sorted(out, key=lambda s: (not s["cited"], s["cite"]))
+
+
 def _run(body: AskIn, allow_fix: bool, allow_verify: bool = True, emit=None) -> dict:
     s = get_settings()
     _, root, index = _repo(body.repo_id)
     try:
         llm = get_llm(body.provider)
-        tools = RepoTools(root, index, s.test_timeout)
+        tools = RepoTools(root, index, s.test_timeout, llm=llm)
         rt = AgentRuntime(llm, tools, s)
         if emit:
             instrument.instrument(rt, llm, tools, emit)
@@ -94,7 +104,7 @@ def _run(body: AskIn, allow_fix: bool, allow_verify: bool = True, emit=None) -> 
     out = {"run_id": run_id, "llm": llm.name, "status": st["status"], "answer": st["answer"], "intent": st["intent"],
            "analysis": st["analysis"], "patch": st["edit"], "diff": st["diff"], "test_before": st["test_before"],
            "test_after": st["test_after"], "steps": st["steps"],
-           "sources": [{"file": c["file"], "lines": f"{c['start']}-{c['end']}", "symbol": c["qualname"]} for c in st["context"]]}
+           "sources": _sources(st["context"], st.get("citations")), "citations": st.get("citations") or {"cited": [], "invalid": []}}
     runs = s.data_dir / "runs"
     runs.mkdir(parents=True, exist_ok=True)
     (runs / f"{run_id}.json").write_text(json.dumps(out, indent=2))
@@ -250,7 +260,7 @@ def _feature(repo_id: str, provider: str | None, fn, emit=None):
     s = get_settings()
     _, root, index = _repo(repo_id)
     try:
-        llm, tools = get_llm(provider), RepoTools(root, index, s.test_timeout)
+        llm = get_llm(provider); tools = RepoTools(root, index, s.test_timeout, llm=llm)
         if emit:
             instrument.instrument(None, llm, tools, emit)
         return fn(llm, tools, s)
@@ -648,3 +658,100 @@ def github_repos(q: str = "", page: int = 1):
         raise HTTPException(401, str(e))
     except ValueError as e:
         raise HTTPException(502, str(e))
+
+
+@app.delete("/repositories/{repo_id}")
+def delete_repository(repo_id: str):
+    try:
+        service().delete(repo_id)
+    except KeyError:
+        raise HTTPException(404, f"unknown repository: {repo_id}")
+    return {"deleted": repo_id}
+
+
+# ---- v7: RAG pipeline info + retrieval experiments -------------------------------------------------------
+_experiments: exp_mod.Experiments | None = None
+
+
+def experiments() -> exp_mod.Experiments:
+    global _experiments
+    if _experiments is None or _experiments.dir.parent != get_settings().data_dir:
+        _experiments = exp_mod.Experiments(get_settings().data_dir)
+    return _experiments
+
+
+@app.get("/rag/info")
+def rag_info():
+    """How retrieval is configured right now: storage backend, embedding model, reranker, fusion settings."""
+    s, svc = get_settings(), service()
+    emb_name, emb_dim, emb_error = "", 0, ""
+    try:
+        e = get_embedder()
+        emb_name, emb_dim = e.name, int(e.dim or 0)
+    except Exception as ex:  # noqa: BLE001 - e.g. a missing API key: show it instead of failing the page
+        emb_error = str(ex)
+    info = {"store": "pgvector" if svc.pg is not None else "memory", "embedding": {"name": emb_name, "dim": emb_dim, "error": emb_error},
+            "reranker": s.reranker, "retrieval": {"mode": s.retrieval_mode, "rrf_k": s.rrf_k, "candidates": s.retrieval_candidates,
+                                                  "vector_weight": s.vector_weight if s.vector_weight is not None else (0.25 if emb_name == "hash" else 1.0),
+                                                  "keyword_weight": s.keyword_weight},
+            "context_token_budget": s.context_token_budget, "models": []}
+    if svc.pg is not None:
+        try:
+            info["models"] = svc.pg.models()
+        except Exception as ex:  # noqa: BLE001
+            info["database_error"] = str(ex)[:200]
+    return info
+
+
+@app.get("/experiments/datasets")
+def experiment_datasets():
+    return exp_mod.list_datasets()
+
+
+@app.get("/experiments")
+def list_experiments():
+    return experiments().list()
+
+
+@app.get("/experiments/jobs/{job_id}")
+def experiment_job(job_id: str):
+    job = experiments().jobs.get(job_id)
+    if not job:
+        raise HTTPException(404, f"unknown job: {job_id}")
+    return job
+
+
+@app.get("/experiments/{exp_id}")
+def get_experiment(exp_id: str):
+    try:
+        return experiments().get(exp_id)
+    except KeyError:
+        raise HTTPException(404, f"unknown experiment: {exp_id}")
+
+
+class ExperimentIn(BaseModel):
+    repo_id: str
+    dataset: str
+    preset: str | None = None
+    embedders: list[str] = []
+    rerankers: list[str] = []
+    configs: list[dict] = []
+    ks: list[int] = [1, 3, 5, 10]
+    use_pgvector: bool = False
+
+
+@app.post("/experiments")
+def run_experiment_endpoint(body: ExperimentIn):
+    """Start a benchmark on a registered repository. Returns a job id to poll at /experiments/jobs/{id}."""
+    meta, root, _ = _repo(body.repo_id)
+    store = service().pg if body.use_pgvector else None
+    if body.use_pgvector and store is None:
+        raise HTTPException(400, "PostgreSQL isn't configured (set DATABASE_URL)")
+    try:
+        job = experiments().start(root, body.dataset, {"embedders": body.embedders, "rerankers": body.rerankers, "configs": body.configs,
+                                                       "ks": body.ks}, store, meta["name"])
+    except RuntimeError as e:
+        raise HTTPException(409, str(e))
+    except (ValueError, KeyError) as e:
+        raise HTTPException(400, str(e))
+    return {"job_id": job}

@@ -35,6 +35,22 @@ class Settings:
         self.gitlab_token = os.getenv("GITLAB_TOKEN", "")
         self.bitbucket_username = os.getenv("BITBUCKET_USERNAME", "")
         self.bitbucket_app_password = os.getenv("BITBUCKET_APP_PASSWORD", "")
+        # ---- RAG pipeline ----
+        self.database_url = os.getenv("DATABASE_URL", "")            # postgresql://user:pass@host/db  -> chunks + vectors in PostgreSQL/pgvector
+        self.database_schema = os.getenv("DATABASE_SCHEMA", "")        # optional: keep this app's tables in their own schema
+        self.rag_store = os.getenv("RAG_STORE", "auto").lower()      # auto (pgvector if DATABASE_URL is set) | memory | pgvector
+        self.embedding_model = os.getenv("EMBEDDING_MODEL", "")
+        self.embedding_dim = int(os.getenv("EMBEDDING_DIM", "0") or 0)
+        self.openai_base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+        self.reranker = os.getenv("RERANKER", "heuristic")           # none | heuristic | bge-reranker-base | cross-encoder:<model> | llm
+        self.retrieval_mode = os.getenv("RETRIEVAL_MODE", "hybrid")  # hybrid | vector | keyword
+        self.rrf_k = int(os.getenv("RRF_K", "60"))
+        # Weight of the vector leg in hybrid fusion. Unset = automatic: 0.25 for the lexical hashing baseline (measured: equal
+        # weights are worse than BM25 alone, see eval/), 1.0 for real embedding models. Re-tune for yours with `python -m app.rag.eval`.
+        self.vector_weight = float(os.environ["VECTOR_WEIGHT"]) if os.getenv("VECTOR_WEIGHT") else None
+        self.keyword_weight = float(os.getenv("KEYWORD_WEIGHT", "1.0"))
+        self.retrieval_candidates = int(os.getenv("RETRIEVAL_CANDIDATES", "50"))
+        self.context_token_budget = int(os.getenv("CONTEXT_TOKEN_BUDGET", "6000"))
         self.max_context_chunks = int(os.getenv("MAX_CONTEXT_CHUNKS", "12"))
 
 

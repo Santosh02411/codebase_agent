@@ -10,7 +10,7 @@ from pathlib import Path
 from . import auth, gitops, ingest, providers
 from .config import Settings
 from .intel.stats import repo_stats
-from .retrieval.embeddings import get_embedder
+from .rag.embedders import get_embedder
 from .retrieval.index import CodeIndex, StaleIndex
 
 
@@ -30,12 +30,24 @@ class RepoService:
         self._locks: dict[str, threading.Lock] = defaultdict(threading.Lock)
         self._meta_lock = threading.Lock()
         self.auth = auth.AuthStore(settings.data_dir)
+        self.pg = None
+        if settings.rag_store == "pgvector" or (settings.rag_store == "auto" and settings.database_url):
+            if not settings.database_url:
+                raise ValueError("RAG_STORE=pgvector needs DATABASE_URL")
+            from .rag.pg import PgStore  # imported lazily: psycopg is only required for the PostgreSQL backend
+            self.pg = PgStore(settings.database_url, settings.database_schema or None)
 
     # ---- registry -----------------------------------------------------------------------------
     def _meta(self) -> dict:
+        if self.pg is not None:
+            return {m["id"]: m for m in self.pg.list_repos()}
         return json.loads(self.meta_path.read_text()) if self.meta_path.exists() else {}
 
     def _save_meta(self, m: dict) -> None:
+        if self.pg is not None:
+            for meta in m.values():
+                self.pg.put_repo(meta["id"], meta["name"], meta["source"], meta)
+            return
         self.meta_path.write_text(json.dumps(m, indent=2))
 
     @staticmethod
@@ -110,8 +122,12 @@ class RepoService:
                 self._set_status(repo_id, phase=phase, done=done, total=total)
 
             try:
-                index = ingest.build_index(root, get_embedder(self.s.embedding_provider), self.idx_dir / repo_id, progress)
-                index.save(self.idx_dir / f"{repo_id}.pkl")
+                embedder = get_embedder()
+                if self.pg is not None:
+                    index = ingest.build_index(root, embedder, None, progress, pg=self.pg, repo_id=repo_id, repo_info=(name, source))
+                else:
+                    index = ingest.build_index(root, embedder, self.idx_dir / repo_id, progress)
+                    index.save(self.idx_dir / f"{repo_id}.pkl")
             except Exception as e:  # noqa: BLE001
                 self._set_status(repo_id, state="error", phase="failed", error=f"{type(e).__name__}: {e}"[:300])
                 raise
@@ -126,7 +142,10 @@ class RepoService:
                         "provider": provider or old.get("provider", "local"), "branch": head["branch"], "commit": head["commit"],
                         "detached": head["detached"], "languages": langs, "symbols": len(index.graph.symbols), "last_index": index.report}
                 m[repo_id] = meta
-                self._save_meta(m)
+                if self.pg is not None:
+                    self.pg.put_repo(repo_id, name, source, meta)
+                else:
+                    self._save_meta(m)
             self._set_status(repo_id, state="ready", phase="ready", done=1, total=1, report=index.report)
             return meta
         finally:
@@ -143,6 +162,24 @@ class RepoService:
             raise KeyError(repo_id)
         return meta, self.repos_dir / repo_id, None
 
+    def delete(self, repo_id: str) -> None:
+        """Remove a repository: its rows/vectors (PostgreSQL), cached index, and the server's working copy."""
+        import shutil
+        if repo_id not in self._meta():
+            raise KeyError(repo_id)
+        if self.pg is not None:
+            self.pg.delete_repo(repo_id)
+        else:
+            with self._meta_lock:
+                m = self._meta()
+                m.pop(repo_id, None)
+                self._save_meta(m)
+            (self.idx_dir / f"{repo_id}.pkl").unlink(missing_ok=True)
+            shutil.rmtree(self.idx_dir / repo_id, ignore_errors=True)
+        self._cache.pop(repo_id, None)
+        self._status.pop(repo_id, None)
+        shutil.rmtree(self.repos_dir / repo_id, ignore_errors=True)
+
     def list(self) -> list[dict]:
         return list(self._meta().values())
 
@@ -150,6 +187,8 @@ class RepoService:
         meta = self._meta().get(repo_id)
         if not meta:
             raise KeyError(repo_id)
+        if repo_id not in self._cache and self.pg is not None:
+            self._cache[repo_id] = self.pg.load_index(repo_id, get_embedder())
         if repo_id not in self._cache:
             try:
                 self._cache[repo_id] = CodeIndex.load(self.idx_dir / f"{repo_id}.pkl")

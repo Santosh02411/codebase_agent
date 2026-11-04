@@ -10,6 +10,7 @@ from typing import Callable
 
 import numpy as np
 
+from ..rag.textutil import content_hash, embed_text
 from .chunks import chunks_for
 from .extract import extract_file, sha1
 from .graph import CodeGraph
@@ -33,6 +34,7 @@ class IndexReport:
     duration_ms: int = 0
     changed_files: list[str] = field(default_factory=list)
     parsers: dict = field(default_factory=dict)
+    store: dict = field(default_factory=dict)   # PostgreSQL sync details (rows written, vectors reused/embedded/pending)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -46,9 +48,18 @@ def _load_json(p: Path) -> dict:
 
 
 class IndexBuilder:
-    def __init__(self, root: Path, embedder, cache_dir: Path | None = None, progress: Progress | None = None) -> None:
+    @staticmethod
+    def _deps(manifest_deps: dict, manifest_files: list) -> dict:
+        deps = {"requirements": sorted(manifest_deps.get("python", ())), "node": sorted(manifest_deps.get("node", ())),
+                **{k: sorted(v) for k, v in manifest_deps.items() if k not in ("python", "node")}, "files": manifest_files}
+        deps["python"] = deps["requirements"]
+        return deps
+
+    def __init__(self, root: Path, embedder, cache_dir: Path | None = None, progress: Progress | None = None, *,
+                 pg=None, repo_id: str = "", repo_info: tuple[str, str] = ("", "")) -> None:
         self.root, self.embedder, self.cache_dir = root, embedder, cache_dir
         self.progress = progress or (lambda *_: None)
+        self.pg, self.repo_id, self.repo_info = pg, repo_id, repo_info   # pg = PgStore: chunks/vectors/facts go to PostgreSQL
 
     def build(self):
         from ..ingest import iter_source_files  # late import: ingest imports this module
@@ -58,7 +69,9 @@ class IndexBuilder:
         report = IndexReport()
         facts_cache: dict[str, dict] = {}
         emb_cache: dict[str, np.ndarray] = {}
-        if self.cache_dir:
+        if self.pg is not None:
+            facts_cache = self.pg.load_facts(self.repo_id, EXTRACTOR_VERSION)
+        elif self.cache_dir:
             self.cache_dir.mkdir(parents=True, exist_ok=True)
             cached = _load_json(self.cache_dir / "facts.json")
             if cached.get("version") == EXTRACTOR_VERSION:
@@ -128,8 +141,22 @@ class IndexBuilder:
             c.id = i
         report.chunks_total = len(chunks)
 
-        keys = [sha1(f"{c.file}\n{c.qualname}\n{c.route}\n{c.doc}\n{c.text}".encode()) for c in chunks]
-        embed_texts = {k: f"{c.file}\n{c.qualname}\n{c.route}\n{c.doc}\n{c.text}" for k, c in zip(keys, chunks)}
+        if self.pg is not None:
+            deps = self._deps(manifest_deps, manifest_files)
+            imports = {p: sorted({i.module for i in f.imports if i.module and i.level == 0}) for p, f in facts.items() if f.language == "python"}
+            sync = self.pg.sync_repository(self.repo_id, name=self.repo_info[0], source=self.repo_info[1], meta={}, facts=facts, chunks=chunks,
+                                           changed=set(report.changed_files), tree=sorted(facts), deps=deps, imports=imports, context=context,
+                                           extractor_version=EXTRACTOR_VERSION, embedder=self.embedder, progress=self.progress)
+            report.chunks_embedded, report.chunks_reused = sync.vectors_embedded, max(0, len(chunks) - sync.vectors_embedded)
+            report.store = sync.to_dict()
+            report.duration_ms = int((time.time() - t0) * 1000)
+            index = self.pg.load_index(self.repo_id, self.embedder)
+            index.report = report.to_dict()
+            self.progress("ready", 1, 1)
+            return index
+
+        keys = [content_hash(c) for c in chunks]
+        embed_texts = {k: embed_text(c) for k, c in zip(keys, chunks)}
         missing = [k for k in dict.fromkeys(keys) if k not in emb_cache]
         report.chunks_embedded = len(missing)
         report.chunks_reused = len(set(keys)) - len(missing)
@@ -142,9 +169,7 @@ class IndexBuilder:
         self.progress("embedding", len(missing), len(missing))
         emb = np.vstack([emb_cache[k] for k in keys]).astype(np.float32) if keys else np.zeros((0, 1), dtype=np.float32)
 
-        deps = {"requirements": sorted(manifest_deps.get("python", ())), "node": sorted(manifest_deps.get("node", ())),
-                **{k: sorted(v) for k, v in manifest_deps.items() if k not in ("python", "node")}, "files": manifest_files}
-        deps["python"] = deps["requirements"]
+        deps = self._deps(manifest_deps, manifest_files)
         imports = {p: sorted({i.module for i in f.imports if i.module and i.level == 0}) for p, f in facts.items() if f.language == "python"}
         index = CodeIndex(chunks, emb, sorted(facts), deps, imports, self.embedder.name, self.embedder, facts=facts, graph=graph,
                           context=context)

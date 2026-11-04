@@ -1,3 +1,5 @@
+"""Original file-level evaluation (recall@k, precision@k, MRR). For symbol-level labels, Recall/Precision/MRR/NDCG,
+context metrics, confidence intervals and model comparison use `python -m app.rag.eval` instead (see docs/RAG.md)."""
 from __future__ import annotations
 import argparse
 import json
