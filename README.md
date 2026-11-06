@@ -56,5 +56,10 @@ Known limits: resolution is static and name-based, so dynamic dispatch, reflecti
 
 **GitHub sign-in:** create an OAuth App (callback `http://localhost:8000/auth/github/callback`) and set `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`. The token is stored in `data/auth.json` (mode 0600), never sent to the browser, and passed to git through the environment. This server assumes **one local user**; add real accounts before exposing it on a network.
 
+## RAG pipeline & retrieval experiments (v7)
+Hybrid retrieval (vector search + BM25 fused with Reciprocal Rank Fusion) → reranking → token-budgeted context with `[n]` citations that are validated against what the model was shown. Storage is **PostgreSQL + pgvector** when `DATABASE_URL` is set (`docker compose up db`), otherwise in-memory. Embedding providers: OpenAI (and OpenAI-compatible servers), Gemini, local BGE/sentence-transformers or fastembed, plus an offline hashing baseline. Rerankers: heuristic, cross-encoder (BGE reranker), LLM.
+
+`python -m app.rag.eval run --repo . --dataset eval/datasets/codebase_agent.jsonl --preset offline` measures Recall@K, Precision@K, MRR, NDCG, Context Precision and Context Recall with confidence intervals; the **Experiments** view in the UI runs and browses the same experiments. Architecture, schema, metric definitions, how to compare real models, and baseline results: [docs/RAG.md](docs/RAG.md).
+
 ## Pushing to GitHub
 `venv/`, `.env` and `data/` are git-ignored. Never commit the virtual environment; others recreate it from `requirements.txt`.

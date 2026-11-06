@@ -1,0 +1,4 @@
+# Files the code agent should not index (one pattern per line).
+# Evaluation datasets and results contain the benchmark questions: indexing them would let the benchmark find its own answers.
+/eval/
+/data/
