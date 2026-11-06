@@ -109,3 +109,11 @@ export function useFetchHistory(id: string | null) {
     onError: (e: Error) => toast.error(e.message),
   });
 }
+
+// ---- RAG pipeline & experiments ------------------------------------------------------------------------------
+export const useRagInfo = () => useQuery({ queryKey: ["raginfo"], queryFn: api.ragInfo, staleTime: 10_000 });
+export const useDatasets = () => useQuery({ queryKey: ["datasets"], queryFn: api.datasets });
+export const useExperiments = () => useQuery({ queryKey: ["experiments"], queryFn: api.experiments });
+export const useExperiment = (id: string | undefined) => useQuery({ queryKey: ["experiment", id], queryFn: () => api.experiment(id!), enabled: !!id, staleTime: Infinity });
+export const useExperimentJob = (id: string | null) =>
+  useQuery({ queryKey: ["expjob", id], queryFn: () => api.experimentJob(id!), enabled: !!id, refetchInterval: (q) => (q.state.data?.state === "running" || !q.state.data ? 500 : false) });
