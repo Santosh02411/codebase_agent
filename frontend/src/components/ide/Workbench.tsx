@@ -1,7 +1,7 @@
 "use client";
 import { useEffect } from "react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
-import { Bot, Boxes, ChevronUp, FolderTree, GitBranch, GitCommitHorizontal, Loader2, PanelBottom, PanelRight, Plus, RefreshCw, Search, Sparkles, Terminal } from "lucide-react";
+import { Bot, Boxes, FlaskConical, ChevronUp, FolderTree, GitBranch, GitCommitHorizontal, Loader2, PanelBottom, PanelRight, Plus, RefreshCw, Search, Sparkles, Terminal } from "lucide-react";
 import { useActiveIndexing, useGitStatus, useHealth, useRepos, useReindex } from "@/hooks/queries";
 import { useQueryClient } from "@tanstack/react-query";
 import { useIde, type SidebarView } from "@/store/ide";
@@ -16,6 +16,7 @@ import { EditorArea } from "./EditorArea";
 import { Explorer } from "./Explorer";
 import { GitPanel } from "./GitPanel";
 import { RepoPanel } from "./RepoPanel";
+import { ExperimentsPanel } from "./ExperimentsPanel";
 import { toast } from "sonner";
 import { SearchPanel } from "./SearchPanel";
 import { useState } from "react";
@@ -42,6 +43,7 @@ function ActivityBar() {
       <Btn id="explorer" icon={<FolderTree />} label="Explorer" />
       <Btn id="search" icon={<Search />} label="Search" />
       <Btn id="repo" icon={<Boxes />} label="Repository: stats, branches, commits" />
+      <Btn id="experiments" icon={<FlaskConical />} label="Retrieval experiments" />
       <Btn id="git" icon={<GitBranch />} label="Git changes" badge={n} />
     </div>
   );
@@ -178,6 +180,7 @@ export function Workbench() {
               {sidebar === "explorer" && <Explorer repoId={repoId} />}
               {sidebar === "search" && <SearchPanel repoId={repoId} />}
               {sidebar === "repo" && <RepoPanel repoId={repoId} />}
+              {sidebar === "experiments" && <ExperimentsPanel repoId={repoId} />}
               {sidebar === "git" && <GitPanel repoId={repoId} />}
             </Panel>
             <Handle />

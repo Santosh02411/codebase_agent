@@ -2,7 +2,7 @@
 import { AlertCircle, FileDiff, Loader2, OctagonX, Paperclip } from "lucide-react";
 import { counts } from "@/lib/edits";
 import { currentActivity } from "@/lib/activity";
-import { parseLines } from "@/lib/utils";
+import { cn, parseLines } from "@/lib/utils";
 import type { ChatMessage, Finding, Source } from "@/lib/types";
 import { useIde } from "@/store/ide";
 import { Badge } from "@/components/ui/badge";
@@ -20,8 +20,8 @@ export function SourceChips({ sources, max = 8 }: { sources: Source[]; max?: num
         const [a, b] = parseLines(s.lines);
         return (
           <button key={`${s.file}:${s.lines}:${i}`} onClick={() => openFile(s.file, a, b)} title={s.symbol}
-            className="max-w-full truncate rounded border bg-background px-1.5 py-0.5 font-mono text-[10.5px] text-muted-foreground hover:border-primary hover:text-foreground">
-            {s.file.split("/").pop()}:{s.lines}
+            className={cn("max-w-full truncate rounded border bg-background px-1.5 py-0.5 font-mono text-[10.5px] text-muted-foreground hover:border-primary hover:text-foreground", s.cited && "border-primary/60 text-foreground")}>
+            {s.cite ? <b className={s.cited ? "text-primary" : ""}>[{s.cite}] </b> : null}{s.file.split("/").pop()}:{s.lines}
           </button>
         );
       })}
@@ -122,7 +122,8 @@ export function MessageView({ m }: { m: ChatMessage }) {
       {showMockHint && <div className="mt-2 rounded border border-warning/40 bg-warning/10 px-2 py-1.5 text-[12px]">The offline mock model only searches code. Set <code>LLM_PROVIDER</code> and an API key in <code>.env</code> to generate changes.</div>}
       {m.findings && <Findings items={m.findings} />}
       {m.proposalId && <ProposalCard id={m.proposalId} />}
-      {m.sources && m.sources.length > 0 && (<><div className="mt-2.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Sources</div><SourceChips sources={m.sources} /></>)}
+      {r.citations && r.citations.invalid.length > 0 && <div className="mt-2 rounded border border-warning/40 bg-warning/10 px-2 py-1.5 text-[12px]">⚠ The answer cites {r.citations.invalid.map((n) => `[${n}]`).join(", ")}, which {r.citations.invalid.length === 1 ? "was" : "were"} not among the snippets provided. Treat that part with suspicion.</div>}
+      {m.sources && m.sources.length > 0 && (<><div className="mt-2.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Sources{r.citations ? ` · ${r.citations.cited.length} cited of ${m.sources.length} retrieved` : ""}</div><SourceChips sources={m.sources} /></>)}
     </div>
   );
 }

@@ -79,6 +79,7 @@ export function SearchPanel({ repoId }: { repoId: string }) {
             {sem.data?.map((h) => (
               <button key={h.id} onClick={() => openFile(h.file, h.start, h.end)} className="block w-full border-b px-3 py-2 text-left hover:bg-accent/60">
                 <div className="flex items-center gap-1.5"><FileIcon name={h.file} /><span className="truncate font-medium">{h.qualname}</span>{h.score != null && <Badge variant="outline" className="ml-auto">{h.score}</Badge>}</div>
+                {h.why && <div className="text-[10.5px] text-primary">{h.why}</div>}
                 <div className="truncate text-[11px] text-muted-foreground">{h.file}:{h.start}-{h.end}{h.route ? ` · ${h.route}` : ""}</div>
                 <pre className="mt-1 max-h-16 overflow-hidden whitespace-pre-wrap font-mono text-[10.5px] text-muted-foreground">{h.text.slice(0, 220)}</pre>
               </button>

@@ -196,7 +196,7 @@ export function SourcesPanel({ repoId }: { repoId: string }) {
     return (
       <div className="border-b">
         <div className="flex items-center gap-2 px-3 py-1 hover:bg-accent/40">
-          <BookOpen className="size-3.5 shrink-0 text-sky-400" />
+          {s.cite ? <span className={cn("w-7 shrink-0 text-center font-mono text-[11px]", s.cited ? "font-bold text-primary" : "text-muted-foreground")}>[{s.cite}]</span> : <BookOpen className="size-3.5 shrink-0 text-sky-400" />}
           <button onClick={() => openFile(s.file, a, b)} className="min-w-0 truncate text-left font-mono text-[11.5px] hover:underline">{s.file}:{s.lines}</button>
           <span className="truncate text-muted-foreground">{s.symbol}</span>
           <button className="ml-auto shrink-0 text-[11px] text-primary hover:underline" onClick={() => setPeek(peek === k ? null : k)}>{peek === k ? "Hide" : "Peek"}</button>

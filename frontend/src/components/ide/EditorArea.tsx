@@ -1,6 +1,6 @@
 "use client";
 import { Fragment, useMemo } from "react";
-import { ChevronRight, FileSearch, GitCompare, MessageSquarePlus, Network, Sparkles, TestTube2, Wand2, X, FileDiff, Keyboard } from "lucide-react";
+import { ChevronRight, FileSearch, FlaskConical, GitCompare, MessageSquarePlus, Network, Sparkles, TestTube2, Wand2, X, FileDiff, Keyboard } from "lucide-react";
 import { useFileSymbols } from "@/hooks/queries";
 import { useAgentRun } from "@/hooks/useAgentRun";
 import { useIde, type Tab } from "@/store/ide";
@@ -10,6 +10,7 @@ import { FileIcon } from "./Explorer";
 import { GitDiffTab, ReviewTab } from "./DiffViews";
 import { MonacoEditor } from "./MonacoEditor";
 import { GraphTab } from "./GraphTab";
+import { ExperimentTab } from "./ExperimentTab";
 
 function TabButton({ tab, active }: { tab: Tab; active: boolean }) {
   const { setActiveTab, closeTab } = useIde.getState();
@@ -27,6 +28,7 @@ function TabButton({ tab, active }: { tab: Tab; active: boolean }) {
       {tab.kind === "review" && <FileDiff className="size-3.5 text-primary" />}
       {tab.kind === "diff" && <GitCompare className="size-3.5 text-amber-400" />}
       {tab.kind === "graph" && <Network className="size-3.5 text-emerald-400" />}
+      {tab.kind === "experiment" && <FlaskConical className="size-3.5 text-primary" />}
       <span className="max-w-48 truncate">{tab.title}</span>
       {proposal?.applied && <span className="text-[10px] text-success">applied</span>}
       <button
@@ -112,6 +114,7 @@ export function EditorArea({ repoId }: { repoId: string }) {
         {active?.kind === "file" && active.path && <><MonacoEditor repoId={repoId} path={active.path} /><SelectionBar /></>}
         {active?.kind === "review" && active.proposalId && <ReviewTab key={active.proposalId} repoId={repoId} proposalId={active.proposalId} />}
         {active?.kind === "diff" && active.path && <GitDiffTab key={active.path} repoId={repoId} path={active.path} />}
+        {active?.kind === "experiment" && active.experimentId && <ExperimentTab key={active.id} experimentId={active.experimentId} />}
         {active?.kind === "graph" && active.graph && <GraphTab key={active.id} repoId={repoId} graph={active.graph} />}
       </div>
     </div>
