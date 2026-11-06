@@ -43,9 +43,9 @@ export interface GraphEdge { source: string; target: string; confidence?: string
 export interface Graph { nodes: GraphNode[]; edges: GraphEdge[]; collapsed?: boolean }
 export interface Impact { file: string; dependents: { file: string; distance: number }[]; tests: string[] }
 export interface Health { status: string; llm_provider: string; embedding_provider: string; llm_model: string; github_configured: boolean; git_available: boolean; allow_local_paths: boolean }
-export interface Chunk { id: number; file: string; kind: string; name: string; qualname: string; start: number; end: number; text: string; via: string; route: string; score?: number }
+export interface Chunk { why?: string; id: number; file: string; kind: string; name: string; qualname: string; start: number; end: number; text: string; via: string; route: string; score?: number }
 export interface SymbolInfo { id: string; name: string; qualname: string; kind: string; file: string; start: number; end: number; route?: string; signature?: string; doc?: string; parent?: string }
-export interface Source { file: string; lines: string; symbol: string }
+export interface Source { file: string; lines: string; symbol: string; cite?: number; cited?: boolean }
 export interface TestRun { status: string; passed: boolean; summary: string; output: string }
 export interface Step { node: string; message: string }
 export interface Edit { file: string; search: string; replace: string; explanation?: string }
@@ -77,7 +77,7 @@ export interface ResultData {
   intent?: string; analysis?: Record<string, unknown>; steps?: Step[]; sources?: Source[];
   patch?: Edit | null; diff?: string; test_before?: TestRun | null; test_after?: TestRun | null;
   edits?: Edit[]; new_files?: NewFile[]; files?: string[]; final_files?: Record<string, string>;
-  findings?: Finding[]; facts?: unknown;
+  findings?: Finding[]; facts?: unknown; citations?: { cited: number[]; invalid: number[] };
 }
 
 // ---- client-side models ----------------------------------------------------------------------------
@@ -118,3 +118,27 @@ export interface ChatMessage {
 export interface Run { id: string; mode: Mode; label: string; started: number; ended?: number; state: "running" | "done" | "error" | "cancelled"; events: AgentEvent[] }
 export interface TestEntry { id: string; ts: number; origin: string; run: TestRun }
 export interface TermLine { id: string; kind: "cmd" | "out" | "err"; text: string }
+
+// ---- RAG pipeline & experiments ------------------------------------------------------------------------------
+export interface RagInfo {
+  store: "memory" | "pgvector"; embedding: { name: string; dim: number; error: string }; reranker: string;
+  retrieval: { mode: string; rrf_k: number; candidates: number; vector_weight: number; keyword_weight: number };
+  context_token_budget: number; models: { model: string; dim: number; table: string; hnsw: boolean; vectors: number }[]; database_error?: string;
+}
+export interface DatasetInfo { name: string; questions: number; description: string; repo: string }
+export interface ExperimentSummary { id: string; created: string; dataset: string; questions: number; store: string; configs: number; skipped: number; best: { name: string; mrr: number } | null }
+export interface MetricStat { mean: number; lo: number; hi: number }
+export interface ExpConfigResult {
+  config: { name: string; embedder: string; mode: string; reranker: string; vector_weight: number; pool: number };
+  status: "ok" | "skipped" | "failed"; reason?: string; n?: number;
+  summary?: Record<"symbol" | "file", Record<string, MetricStat>>;
+  latency_ms?: { mean: number; p50: number; p95: number };
+  per_question?: { id: string; question: string; tags: string[]; first_relevant_rank: number | null; expected: string[]; retrieved: string[] }[];
+}
+export interface ExperimentResult {
+  id: string; created: string; dataset: { name: string; questions: number }; repo: string; store: string; ks: number[]; baseline: string | null;
+  indexes: Record<string, { embedder: string; dim: number; chunks: number; seconds: number; embed_calls: number; embed_tokens: number }>;
+  skipped_embedders: Record<string, string>; label_problems: string[]; configs: ExpConfigResult[];
+  comparisons: Record<string, Record<string, { delta: number; p: number }>>; elapsed_s: number;
+}
+export interface ExperimentJob { id: string; state: "running" | "done" | "error"; phase: string; done: number; total: number; result_id: string | null; error: string }

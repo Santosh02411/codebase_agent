@@ -3,12 +3,12 @@ import { persist } from "zustand/middleware";
 import type { AgentEvent, ChatMessage, Decision, Mode, Proposal, Run, TermLine, TestEntry, TestRun } from "@/lib/types";
 import { basename, uid } from "@/lib/utils";
 
-export type SidebarView = "explorer" | "search" | "repo" | "git";
+export type SidebarView = "explorer" | "search" | "repo" | "experiments" | "git";
 export type BottomTab = "activity" | "terminal" | "tests" | "sources" | "problems";
 export type PaletteMode = "files" | "symbols" | "workspace" | "commands";
 
 export interface GraphFocus { mode: "calls" | "modules"; focus?: string }
-export interface Tab { id: string; kind: "file" | "review" | "diff" | "graph"; path?: string; proposalId?: string; title: string; graph?: GraphFocus }
+export interface Tab { id: string; kind: "file" | "review" | "diff" | "graph" | "experiment"; experimentId?: string; path?: string; proposalId?: string; title: string; graph?: GraphFocus }
 export interface Selection { file: string; startLine: number; endLine: number; text: string }
 export interface Reveal { path: string; line: number; endLine: number; nonce: number }
 
@@ -26,6 +26,7 @@ interface IdeState {
   openReview: (proposalId: string) => void;
   openDiff: (path: string) => void;
   openGraph: (mode: "calls" | "modules", focus: string | undefined, title: string) => void;
+  openExperiment: (id: string, title: string) => void;
   closeTab: (id: string) => void;
   setActiveTab: (id: string) => void;
   reveal: Reveal | null;
@@ -107,6 +108,11 @@ export const useIde = create<IdeState>()(
           const id = `graph:${mode}:${focus ?? "*"}`;
           const tab: Tab = { id, kind: "graph", title, graph: { mode, focus } };
           return { tabs: s.tabs.some((t) => t.id === id) ? s.tabs : [...s.tabs, tab], activeTabId: id };
+        }),
+      openExperiment: (experimentId, title) =>
+        set((s) => {
+          const id = `experiment:${experimentId}`;
+          return { tabs: s.tabs.some((t) => t.id === id) ? s.tabs : [...s.tabs, { id, kind: "experiment" as const, experimentId, title }], activeTabId: id };
         }),
       closeTab: (id) =>
         set((s) => {

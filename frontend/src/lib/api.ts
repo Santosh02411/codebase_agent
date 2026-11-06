@@ -1,5 +1,6 @@
 import type {
   GitStatus, GitVersions, GrepResult, Health, RepoMeta, SymbolInfo, TerminalResult, TestRun, Chunk, Edit, NewFile,
+  DatasetInfo, ExperimentJob, ExperimentResult, ExperimentSummary, RagInfo,
   AuthStatus, BranchInfo, CommitInfo, GithubRepo, Graph, Impact, IndexStatus, RemotePreview, RepoStats, SymbolDetail,
 } from "./types";
 
@@ -48,6 +49,13 @@ export const api = {
   authStatus: () => request<AuthStatus>("/auth/status"),
   githubRepos: (q: string) => request<GithubRepo[]>(`/github/repos?${qs({ q })}`),
   githubLogout: () => request<{ connected: boolean }>("/auth/github/logout", { method: "POST" }),
+  ragInfo: () => request<RagInfo>("/rag/info"),
+  datasets: () => request<DatasetInfo[]>("/experiments/datasets"),
+  experiments: () => request<ExperimentSummary[]>("/experiments"),
+  experiment: (id: string) => request<ExperimentResult>(`/experiments/${id}`),
+  experimentJob: (id: string) => request<ExperimentJob>(`/experiments/jobs/${id}`),
+  runExperiment: (body: { repo_id: string; dataset: string; embedders: string[]; rerankers: string[]; use_pgvector: boolean }) =>
+    request<{ job_id: string }>("/experiments", json("POST", body)),
   githubLoginUrl: () => `${API_URL}/auth/github/login`,
   uploadRepo: (file: File, name: string) => {
     const f = new FormData();
