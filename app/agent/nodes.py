@@ -1,161 +1,341 @@
+"""Graph nodes and routing. A node takes the state and returns a partial update; `route` decides what runs next from the plan and
+from what has happened so far. The same nodes drive LangGraph (graph.py) or the built-in runner."""
 from __future__ import annotations
-from .. import patching, sandbox
+import threading
+import time
 from ..config import Settings
-from ..rag.context import CITATION_RULES, build_pack, extract_citations, render_blocks
 from ..llm import LLM
+from ..rag.context import check_file_refs, extract_citations
+from . import prompts
+from .context import ContextBuilder
+from .. import verify
+from .errors import ErrorReport
+from .memory import ConversationStore
+from .registry import ToolRegistry
+from .specialists import Coder, Debugger, Documenter, PRReviewer, Planner, Researcher, Reviewer, Tester
 from .state import AgentState, log
 from .tools import RepoTools
 
 END = "__end__"
-SYSTEM = ("You are a senior software engineer analysing a code repository. "
-          "Only make claims the provided code supports. Prefer minimal, targeted fixes.")
-
-
-def format_relations(tools, chunks: list[dict], limit: int = 8) -> str:
-    """How the retrieved code connects (calls / called-by / inheritance), from the repository's call graph."""
-    lines = [r for r in (tools.relations(c["id"]) for c in chunks[:limit]) if r]
-    return ("\n\nCode relationships (from the call graph):\n" + "\n".join(f"- {l}" for l in lines)) if lines else ""
-
-
-def format_context(chunks: list[dict], max_chars: int = 3500) -> str:
-    """Numbered code blocks: the numbers are the citation ids the model is told to use ([1] is chunks[0])."""
-    return render_blocks(chunks, max_chars)
+SYSTEM = prompts.BASE
+STATUS_OF = {"resolved": "fix_verified", "partial": "fix_verified", "no_regressions": "fix_verified", "unverified": "fix_unverified", "not_resolved": "fix_failed"}
+VERDICT_LINE = {"resolved": "✅ **Resolved.**", "partial": "⚠️ **Partially resolved.**", "no_regressions": "✅ **No regressions.**",
+                "unverified": "⚠️ **Not verified.**", "not_resolved": "❌ **Not resolved.**"}
+AGENT_OF = {"pr": "reviewer", "understand": "planner", "plan": "planner", "research": "researcher", "analyze": "debugger", "code": "coder", "test": "tester",
+            "reflect": "debugger", "review": "reviewer", "document": "documenter", "respond": "supervisor"}
 
 
 class AgentRuntime:
-    """Graph nodes + routing. Each node takes the state and returns a partial state update.
-    The same nodes drive either LangGraph (if installed) or the built-in runner."""
-
-    def __init__(self, llm: LLM, tools: RepoTools, settings: Settings) -> None:
+    def __init__(self, llm: LLM, tools: RepoTools, settings: Settings, store: ConversationStore | None = None) -> None:
         self.llm, self.tools, self.s = llm, tools, settings
+        self.store = store or ConversationStore(None)
+        self.registry = ToolRegistry(tools)
+        self.ctx = ContextBuilder(tools, settings)
+        self.planner, self.researcher, self.debugger = Planner(self), Researcher(self), Debugger(self)
+        self.coder, self.tester, self.reviewer, self.documenter = Coder(self), Tester(self), Reviewer(self), Documenter(self)
+        self.pr_reviewer = PRReviewer(self)
+        limit = getattr(settings, "max_run_seconds", 0) or 0
+        self.deadline = (time.monotonic() + limit) if limit > 0 else None   # wall-clock limit for the whole run
+        self.cancel = threading.Event()                                    # set() from another thread to stop the run at the next node
 
     # ---- nodes -------------------------------------------------------------------------------
-    def analyze_query(self, st: AgentState) -> dict:
-        q = st["question"]
-        prompt = (f"Repository files:\n{self.tools.list_tree(60)}\n\nUser question:\n{q}\n\n"
-                  'Return JSON: {"intent": "debug" or "explain", "queries": [up to 4 short code-search queries: '
-                  "symbol names, error strings, or concepts]}")
-        res = self.llm.json("analyze_query", SYSTEM, prompt, hints={"question": q})
-        queries = [x for x in res.get("queries", []) if isinstance(x, str) and x.strip()][:5]
-        if q not in queries:
-            queries.insert(0, q)
-        intent = "debug" if res.get("intent") == "debug" else "explain"
-        return {"intent": intent, "queries": queries,
-                "steps": log(st, "analyze_query", f"intent={intent}; queries={queries}")}
+    def understand(self, st: AgentState) -> dict:
+        return self.planner.understand(st)
 
-    def retrieve(self, st: AgentState) -> dict:
-        ctx = list(st["context"])
-        seen = {c["id"] for c in ctx}
-        found = []
-        for qry in st["queries"]:
-            for h in self.tools.search_code(qry, k=5):
-                if h["id"] not in seen:
-                    seen.add(h["id"]); found.append(h)
-        for h in found[:3]:  # call-graph expansion of the best hits
-            for r in self.tools.related(h["id"]):
-                if r["id"] not in seen:
-                    seen.add(r["id"]); found.append(r)
-        ctx = build_pack((ctx + found)[: self.s.max_context_chunks], self.s.context_token_budget).chunks()
-        msg = "retrieved " + ", ".join(f"{c['file']}::{c['qualname']}" for c in found[:8]) if found else "no new chunks"
-        return {"context": ctx, "queries": [], "retrieval_rounds": st["retrieval_rounds"] + 1,
-                "steps": log(st, "retrieve", msg, count=len(found))}
+    def plan(self, st: AgentState) -> dict:
+        return self.planner.plan(st)
+
+    def research(self, st: AgentState) -> dict:
+        return self.researcher.run(st)
 
     def analyze(self, st: AgentState) -> dict:
-        prompt = (f"Question:\n{st['question']}\n\nRetrieved code:\n{format_context(st['context'])}{format_relations(self.tools, st['context'])}\n\n{CITATION_RULES}\n\n"
-                  'Return JSON: {"need_more": true only if essential code is missing, "follow_up_queries": [..], '
-                  '"answer": "explanation grounded in the code", "root_cause": "if this is a bug", '
-                  '"affected_file": "path", "affected_function": "name"}')
-        res = self.llm.json("analyze", SYSTEM, prompt, hints={"files": list(dict.fromkeys(c["file"] for c in st["context"]))})
-        follow = [x for x in res.get("follow_up_queries", []) if isinstance(x, str) and x.strip()][:3]
-        need = bool(res.get("need_more")) and bool(follow) and st["retrieval_rounds"] < self.s.max_agent_steps
-        return {"analysis": res, "need_more": need, "queries": follow if need else [],
-                "steps": log(st, "analyze", "needs more context: " + str(follow) if need else
-                             f"analysis done: {res.get('affected_file') or 'n/a'}::{res.get('affected_function') or 'n/a'}")}
+        return self.debugger.run(st)
 
-    def generate_fix(self, st: AgentState) -> dict:
-        feedback = ""
-        if st["test_after"] and st["test_after"]["status"] in ("failed", "error"):
-            feedback = f"\nYour previous patch FAILED the tests:\n{st['test_after']['output'][-1500:]}\nPrevious edit: {st['edit']}\n"
-        prompt = (f"Question / error report:\n{st['question']}\n\nAnalysis: {st['analysis']}\n{feedback}\n"
-                  f"Retrieved code:\n{format_context(st['context'])}{format_relations(self.tools, st['context'])}\n\n"
-                  'Return JSON with ONE minimal edit: {"file": "path", "search": "exact existing text that occurs '
-                  'exactly once in the file (keep indentation)", "replace": "new text", "explanation": "why"}')
-        edit = self.llm.json("generate_fix", SYSTEM, prompt, hints={})
-        ok, err = patching.validate_edit(self.tools.root, edit)
-        attempts = st["attempts"] + 1
-        if not ok:
-            return {"edit": None, "diff": "", "fix_error": err, "attempts": attempts,
-                    "steps": log(st, "generate_fix", f"no valid patch: {err}")}
-        diff = patching.make_diff(self.tools.root, edit)
-        return {"edit": edit, "diff": diff, "fix_error": "", "attempts": attempts,
-                "steps": log(st, "generate_fix", f"patch proposed for {edit['file']} (attempt {attempts})")}
+    def code(self, st: AgentState) -> dict:
+        return self.coder.run(st)
 
-    def verify(self, st: AgentState) -> dict:
-        steps = st["steps"]
-        before = st["test_before"]
-        if before is None:
-            work = sandbox.copy_repo(self.tools.root)
-            try:
-                before = sandbox.run_tests(work, self.s.test_timeout)
-            finally:
-                sandbox.cleanup(work)
-            steps = steps + [{"node": "verify", "message": f"baseline tests: {before['status']} ({before['summary']})"}]
-        work = sandbox.copy_repo(self.tools.root)
-        try:
-            patching.apply_edit(work, st["edit"])
-            after = sandbox.run_tests(work, self.s.test_timeout)
-        finally:
-            sandbox.cleanup(work)
-        steps = steps + [{"node": "verify", "message": f"tests after patch: {after['status']} ({after['summary']})"}]
-        return {"test_before": before, "test_after": after, "steps": steps}
+    def test(self, st: AgentState) -> dict:
+        return self.tester.run(st)
+
+    def reflect(self, st: AgentState) -> dict:
+        return self.tester.reflect(st)
+
+    def review(self, st: AgentState) -> dict:
+        return self.reviewer.review_code(st) if st["intent"] == "review" else self.reviewer.review_patch(st)
+
+    def pr(self, st: AgentState) -> dict:
+        return self.pr_reviewer.run(st)
+
+    def document(self, st: AgentState) -> dict:
+        return self.documenter.describe(st) if st["intent"] == "docs" else self.documenter.change_notes(st)
+
+    # ---- the final report --------------------------------------------------------------------------------
+    def affected_files(self, st: AgentState) -> list[dict]:
+        """Every file involved, once, with why: where it failed, the root cause, the call stack, callers, what the patch touches."""
+        order: dict[str, dict] = {}
+
+        def add(path: str, role: str, detail: str = "") -> None:
+            if path:
+                e = order.setdefault(path, {"path": path, "roles": [], "detail": ""})
+                if role not in e["roles"]:
+                    e["roles"].append(role)
+                e["detail"] = e["detail"] or detail
+
+        rep, a = st.get("error_report") or {}, st.get("analysis") or {}
+        if rep.get("file"):
+            add(rep["file"], "failure point", f"line {rep['line']}" + (f" in {rep['function']}()" if rep.get("function") else ""))
+        if a.get("affected_file"):
+            add(a["affected_file"], "root cause", f"{a['affected_function']}()" if a.get("affected_function") else "")
+        for f in (rep.get("frames") or [])[:-1]:
+            add(f["file"], "call stack", f"{f['func']}() line {f['line']}" if f.get("func") else f"line {f['line']}")
+        fn = a.get("affected_function") or rep.get("function")
+        if fn and st["intent"] == "debug":
+            for c in self.tools.callers(fn.split(".")[-1])[:3]:
+                add(c["file"], "caller", f"{c['caller']}()")
+        for f in st.get("patch_files", []):
+            add(f["path"], {"create": "added", "delete": "deleted"}.get(f["op"], "modified"), f"+{f['additions']}/-{f['deletions']}")
+        return list(order.values())
+
+    def _tests_executed(self, st: AgentState) -> str:
+        tb, ta = st.get("test_before"), st.get("test_after")
+        if tb is None and ta is None:
+            return "Tests were not run for this request. Use **Debug** (not Generate Fix) to have the fix verified automatically."
+        rows = []
+        def run_line(label: str, t: dict) -> str:
+            fails = ", ".join(f"`{x['id']}`" for x in t.get("failed_tests", [])[:4])
+            return f"- {label}: **{t['status'].replace('_', ' ')}** — {t['summary']}" + (f" (failing: {fails})" if fails else "") + (f" · `{t['command']}`" if t.get("command") else "")
+        if tb:
+            rows.append(run_line("Before the fix", tb))
+        rg = st.get("regression")
+        if rg:
+            rows.append(f"- Regression test added: `{', '.join(rg['tests'])}` — " + ("**fails on the original code** (it reproduces the problem)" if rg["failed_before"] else "passes on the original code (it does **not** reproduce the problem)")
+                        + (", **passes with the fix**" if rg["passed_after"] else f", still fails with the fix ({', '.join(rg.get('after_failed', [])[:2])})"))
+        if ta:
+            rows.append(run_line("After the fix", ta))
+        la = st.get("lint_after")
+        if la:
+            new = st.get("lint_new", [])
+            blocking = [i for i in new if i.get("blocking")]
+            rows.append(f"- Linter ({la['tool']}): " + ("no new findings" if not new else f"{len(new)} new finding(s), **{len(blocking)} blocking**"
+                        + "".join(f"\n  - `{i['file']}:{i['line']}` {i['code']} {i['message'][:90]}" for i in new[:4])))
+        return "\n".join(rows)
+
+    def _debug_report(self, st: AgentState, status: str) -> str:
+        a, rep = st.get("analysis") or {}, ErrorReport(**{k: v for k, v in (st.get("error_report") or {}).items() if k in ErrorReport.__dataclass_fields__})
+        out: list[str] = []
+        cause = [f"**Exception:** `{rep.exception_type}`" + (f" — {rep.message}" if rep.message else "") + (f" ({rep.category})" if rep.category else "")] if rep.exception_type else []
+        if rep.file:
+            cause.append(f"**Location:** `{rep.file}:{rep.line}`" + (f" in `{rep.function}()`" if rep.function else "") + (f"\n`{rep.code_line}`" if rep.code_line else ""))
+        if rep.variables:
+            cause.append("**Variable:** " + ", ".join(f"`{v['name']}` ({v['evidence']})" for v in rep.variables[:3]))
+        out.append("## Root Cause\n" + "\n\n".join(cause + [a.get("root_cause") or a.get("answer") or "The cause could not be determined from the retrieved code."]))
+        files = st.get("affected_files") or []
+        out.append("## Affected Files\n" + ("\n".join(f"- `{f['path']}` — {', '.join(f['roles'])}" + (f" ({f['detail']})" if f["detail"] else "") for f in files) or "None identified."))
+        expl = [x for x in (a.get("answer") if a.get("root_cause") else "", st.get("explanation")) if x]
+        if rep.frames:
+            expl.append("**How it fails:** " + " → ".join(f"`{f['func'] or f['file']}()`" for f in rep.frames[-5:]) + (f" → `{rep.exception_type}`" if rep.exception_type else ""))
+        out.append("## Explanation\n" + ("\n\n".join(expl) or "See the root cause above."))
+        if st["plan"].get("needs_patch"):
+            if st["patch_files"]:
+                out.append(f"## Proposed Fix\n```diff\n{st['diff']}```\nReview the exact diff and approve it to apply it to the project.")
+            else:
+                out.append("## Proposed Fix\n_No patch was generated._ " + (st["fix_error"] or ""))
+            out.append("## Tests Executed\n" + (self._tests_executed(st) if st["patch_files"] else "Nothing to test: there is no patch."))
+            v = st.get("verification")
+            if not st["patch_files"]:
+                out.append("## Verification Result\n❌ **Not resolved.** No fix could be produced.")
+            elif v is None:
+                out.append("## Verification Result\n⚠️ **Not verified.** Tests were not run for this request.")
+            else:
+                lines = [f"{VERDICT_LINE[v['status']]} {v['summary'][0].upper() + v['summary'][1:]}."]
+                if v["status"] == "not_resolved":
+                    lines.append(f"The agent tried {st['attempts']} time(s).")
+                lines += [f"- {r}" for r in v.get("reasons", [])[:4] if r]
+                rv = st.get("review")
+                if rv and rv.get("summary"):
+                    lines.append(f"Reviewer: {'approved' if rv.get('approved') else 'concerns remain'} — {rv['summary']}" + (f" {rv['feedback']}" if not rv.get("approved") and rv.get("feedback") else ""))
+                out.append("## Verification Result\n" + "\n".join(lines))
+        return "\n\n".join(out)
+
+    @staticmethod
+    def _pr_text(r: dict) -> str:
+        if r["kind"] == "review":
+            head = {"approve": "✅ Approve", "comment": "💬 Comment", "request_changes": "❌ Request changes"}[r["verdict"]]
+            by_file: dict[str, list[dict]] = {}
+            for c in r["comments"]:
+                by_file.setdefault(c["path"], []).append(c)
+            body = "\n".join(f"**`{p}`**\n" + "\n".join(f"- line {c['line']} · **{c['severity']}** — {c['body']}" for c in cs) for p, cs in by_file.items())
+            return (f"## Review of PR #{r['number']}\n**Verdict:** {head}\n\n{r['summary']}\n\n" + (body + "\n\n" if body else "") +
+                    f"_{r['static_note']}_\n\n> This is a **draft**. Nothing has been posted to GitHub: posting needs your approval.")
+        risk = {"low": "🟢 low", "medium": "🟡 medium", "high": "🔴 high"}[r["risk"]]
+        out = [f"## Pull request #{r['number']}\n{r['summary']}", f"**Type:** {r['change_type']} · **Risk:** {risk}" + ("".join(f"\n- {x}" for x in r["risk_reasons"]))]
+        if r["key_changes"]:
+            out.append("## Key Changes\n" + "\n".join(f"- `{c.get('file', '')}` — {c.get('what', '')}" for c in r["key_changes"]))
+        if r["impact"]:
+            out.append("## Impact\n" + "\n".join(f"- {x}" for x in r["impact"]))
+        out.append("## Tests\n" + (r["test_assessment"] or "Not assessed.") + (f"\nTest files changed: {', '.join('`' + t + '`' for t in r['tests_touched'])}" if r["tests_touched"] else "\nNo test files changed."))
+        if r["concerns"]:
+            out.append("## Concerns\n" + "\n".join(f"- **{c['severity']}** `{c['file']}`" + (f":{c['line']}" if c["line"] else "") + f" — {c['message']}" for c in r["concerns"]))
+        if r["questions"]:
+            out.append("## Questions for the Author\n" + "\n".join(f"- {q}" for q in r["questions"]))
+        if r["suggested_reviewers"]:
+            out.append("## Suggested Reviewers\n" + ", ".join(f"{x['author']} ({x['commits']} commits on these files)" for x in r["suggested_reviewers"]))
+        out.append(f"_{r['static_note']}_")
+        return "\n\n".join(out)
+
+    def _tests_report(self, st: AgentState) -> str:
+        """Report for generated tests: what was written, how it follows the repository's conventions, how it ran, what coverage changed."""
+        out: list[str] = []
+        pat = st.get("test_patterns") or {}
+        new = [f for f in st["patch_files"] if f["op"] == "create"]
+        out.append("## Generated Tests\n" + (f"{len(new)} new test file(s): " + ", ".join(f"`{f['path']}` (+{f['additions']} lines)" for f in new) if new else "No test file was produced.")
+                   + (f"\nFramework: **{pat['framework']}**" + (f"; conventions followed: {pat['layout']}" if pat.get("layout") else "") + (f"; assertions: {pat['assertions']}" if pat.get("assertions") else "")
+                      + (f"; mocking: {', '.join(pat['mocking'])}" if pat.get("mocking") else "") if pat.get("framework") else ""))
+        if st.get("explanation"):
+            out.append("## What the Tests Cover\n" + st["explanation"])
+        if st["patch_files"]:
+            out.append(f"## Proposed Change\n```diff\n{st['diff']}```")
+            out.append("## Tests Executed\n" + self._tests_executed(st))
+            cd = st.get("coverage_delta")
+            if cd:
+                rows = "".join(f"\n- `{f['path']}`: {f['before']}% → **{f['after']}%**" + (f" (still uncovered: lines {', '.join(f['missing'][:4])})" if f["missing"] else "") for f in cd["files"][:6])
+                out.append(f"## Coverage\nOverall: {cd['before']}% → **{cd['after']}%**{rows}")
+            if st.get("impl_change"):
+                impl = [f["path"] for f in st["patch_files"] if not verify.is_test_file(f["path"])]
+                out.append("## ⚠ Implementation Changed\nA generated test failed because of what looks like a **bug in the code under test**, so this patch also changes "
+                           f"{', '.join('`' + p + '`' for p in impl)}. Review that change as carefully as any bug fix: the test encodes what the model believes is correct behaviour.")
+            v = st.get("verification")
+            out.append("## Verification Result\n" + (f"{VERDICT_LINE[v['status']]} {v['summary']}" if v else "⚠️ **Not verified.** Tests were not run for this request."))
+        return "\n\n".join(out)
 
     def respond(self, st: AgentState) -> dict:
-        a, parts = st["analysis"], []
-        if a.get("root_cause"):
-            parts.append(f"**Root cause**\n{a['root_cause']}")
-        if a.get("answer"):
-            parts.append(f"**Analysis**\n{a['answer']}")
-        if a.get("affected_file"):
-            parts.append(f"**Affected:** `{a['affected_file']}`" + (f" → `{a['affected_function']}()`" if a.get("affected_function") else ""))
+        a, parts, intent = st.get("analysis") or {}, [], st["intent"]
         status = "answered"
-        if st["allow_fix"] and st["intent"] == "debug":
-            if st["edit"]:
-                parts.append(f"**Suggested fix**\n```diff\n{st['diff']}```")
-                ta = st["test_after"]
-                if ta is None:
-                    status = "fix_unverified"
-                elif ta["status"] == "passed":
-                    status = "fix_verified"
-                    tb = st["test_before"]
-                    parts.append(f"**Verification:** before patch: {tb['status']} ({tb['summary']}); after patch: **passed** ({ta['summary']})")
+        extra: dict = {}
+        if st.get("error"):
+            parts.append(f"**The model call failed:** {st['error']}")
+            status = "error"
+        if intent in ("debug", "change", "tests") and status != "error":
+            extra["affected_files"] = st["affected_files"] = self.affected_files(st) if intent == "debug" else []
+        if intent == "pr" and st.get("pr_report"):
+            parts.append(self._pr_text(st["pr_report"]))
+            status = status if status == "error" else "reviewed"
+        elif intent == "review" and st.get("review_report"):
+            rr = st["review_report"]
+            parts.append(rr["summary"])
+            parts += [f"- **{f['severity']}** `{f['file']}`" + (f":{f['line']}" if f.get("line") else "") + f" — {f['message']}" for f in rr["findings"][:30]]
+            status = status if status == "error" else "reviewed"
+        elif intent == "docs":
+            parts.append(st.get("docs") or "No documentation produced.")
+        else:
+            patch_status = None
+            if st["plan"].get("needs_patch") and status != "error":
+                if st["patch_files"]:
+                    v = st.get("verification")
+                    patch_status = STATUS_OF[v["status"]] if v else "fix_unverified"
                 else:
-                    status = "fix_unverified" if ta["status"] == "no_tests" else "fix_failed"
-                    parts.append(f"**Verification:** tests after patch: **{ta['status']}** ({ta['summary']})")
+                    patch_status = "no_fix"
+                status = patch_status
+            if intent == "tests" and status != "error":
+                parts.append(self._tests_report(st))
+            elif intent == "debug" and st["plan"].get("needs_patch") and status != "error":
+                parts.append(self._debug_report(st, status))
             else:
-                status = "no_fix"
-                parts.append(f"_No patch generated._ {st['fix_error']}".strip())
-        answer = "\n\n".join(parts) or "No answer produced."
-        cites = extract_citations(f"{a.get('answer', '')} {a.get('root_cause', '')}", len(st["context"]))
-        note = f", cited {len(cites['cited'])}/{len(st['context'])} snippets" + (f", {len(cites['invalid'])} invalid citation(s)" if cites["invalid"] else "")
-        return {"answer": answer, "status": status, "citations": cites,
-                "steps": log(st, "respond", f"status={status}{note}")}
+                if a.get("root_cause"):
+                    parts.append(f"**Root cause**\n{a['root_cause']}")
+                if a.get("answer"):
+                    parts.append(f"**Analysis**\n{a['answer']}")
+                if a.get("affected_file"):
+                    parts.append(f"**Affected:** `{a['affected_file']}`" + (f" → `{a['affected_function']}()`" if a.get("affected_function") else ""))
+                if st["plan"].get("needs_patch") and status != "error":
+                    if st["patch_files"]:
+                        if st.get("explanation"):
+                            parts.append(f"**What changed**\n{st['explanation']}")
+                        parts.append(f"**Proposed change**\n```diff\n{st['diff']}```")
+                        parts.append(f"**Tests executed**\n{self._tests_executed(st)}")
+                        v = st.get("verification")
+                        if v:
+                            parts.append(f"**Verification:** {VERDICT_LINE[v['status']]} {v['summary']}")
+                        rv = st.get("review")
+                        if rv and rv.get("summary"):
+                            parts.append(f"**Review:** {'approved' if rv.get('approved') else 'concerns remain'} — {rv['summary']}" + (f" {rv['feedback']}" if not rv.get("approved") and rv.get("feedback") else ""))
+                    else:
+                        parts.append(f"_No patch generated._ {st['fix_error']}".strip())
+            if st.get("docs") and st["plan"].get("needs_docs"):
+                parts.append(f"**Documentation**\n{st['docs']}")
+        answer = "\n\n".join(p for p in parts if p) or "No answer produced."
+        claim_text = f"{a.get('answer', '')} {a.get('root_cause', '')} {a.get('explanation', '')}"
+        cites = extract_citations(claim_text, len(st["context"]))
+        refs = check_file_refs(claim_text, st["context"], self._line_count)
+        if refs["invalid"] or refs["unretrieved"] or refs["grounded"]:   # added only when the answer names file:line, so the response shape is unchanged otherwise
+            cites["references"] = {k: v for k, v in refs.items() if v}
+        note = (f", cited {len(cites['cited'])}/{len(st['context'])} snippets" + (f", {len(cites['invalid'])} invalid citation(s)" if cites["invalid"] else "")
+                + (f", {len(refs['invalid'])} file:line reference(s) not found in the repository" if refs["invalid"] else ""))
+        if refs["invalid"]:
+            answer += "\n\n_Warning: these file:line references could not be matched to the repository and should not be trusted: " + ", ".join(refs["invalid"][:6]) + "._"
+        if st.get("conversation_id"):
+            files = list(dict.fromkeys(([a["affected_file"]] if a.get("affected_file") else []) + list(st.get("final_files", {}))))
+            self.store.append(st["conversation_id"], {"question": st["question"][:400], "intent": intent, "status": status, "files": files[:6],
+                                                      "summary": (a.get("answer") or a.get("root_cause") or st.get("explanation") or answer)[:500]})
+        return {"answer": answer, "status": status, "citations": cites, "steps": log(st, "respond", f"status={status}{note}"), **extra}
+
+    def _line_count(self, path: str):
+        """Length of a repository file in lines, or None when the file does not exist / cannot be read (used to validate file:line claims)."""
+        try:
+            return len(self.tools.read_file(path).splitlines())
+        except (ValueError, OSError, UnicodeDecodeError):
+            return None
 
     # ---- routing -----------------------------------------------------------------------------
     def route(self, node: str, st: AgentState) -> str:
-        if node == "analyze_query":
-            return "retrieve"
-        if node == "retrieve":
+        if node == "respond":
+            return END
+        if st.get("error") or st.get("step_count", 0) >= self.s.max_agent_total_steps:
+            return "respond"
+        plan, intent = st.get("plan") or {}, st.get("intent", "explain")
+        if node == "understand":
+            return "plan"
+        if node == "plan":
+            return "research"
+        if node == "research":
+            if intent == "pr":
+                return "pr"
+            if intent == "review":
+                return "review"
+            if intent == "docs":
+                return "document"
+            if intent == "tests":
+                return "code" if plan.get("needs_patch") else "respond"
             return "analyze"
         if node == "analyze":
             if st["need_more"]:
-                return "retrieve"
-            return "generate_fix" if st["allow_fix"] and st["intent"] == "debug" else "respond"
-        if node == "generate_fix":
-            if not st["edit"]:
-                return "respond"
-            return "verify" if st["allow_verify"] else "respond"
-        if node == "verify":
-            if st["test_after"]["status"] in ("failed", "error") and st["attempts"] < self.s.max_fix_attempts:
-                return "generate_fix"
+                return "research"
+            return "code" if plan.get("needs_patch") else "respond"
+        if node == "code":
+            if st["fix_error"]:               # the latest attempt was rejected by the patch engine / checks: try again with that feedback
+                return "code" if (st["proposed"] and st["attempts"] < self.s.max_fix_attempts) else "respond"
+            return "test" if plan.get("needs_tester") else self._after_patch(st)
+        if node == "test":
+            if (st.get("verification") or {}).get("status") == "not_resolved":
+                return "reflect" if st["attempts"] < self.s.max_fix_attempts else "respond"
+            return self._after_patch(st)
+        if node == "pr":
             return "respond"
-        return END
+        if node == "reflect":
+            rf = st.get("reflection") or {}
+            return "respond" if rf.get("action") == "stop" else "research" if rf.get("action") == "research_more" else "code"
+        if node == "review":
+            if intent == "review":
+                return "respond"
+            rv = st.get("review") or {}
+            if not rv.get("approved", True) and st["review_rounds"] < 2 and st["attempts"] < self.s.max_fix_attempts:
+                return "code"
+            return "document" if plan.get("needs_docs") else "respond"
+        return "respond"
+
+    @staticmethod
+    def _after_patch(st: AgentState) -> str:
+        plan = st.get("plan") or {}
+        if plan.get("needs_review") and st["review_rounds"] < 2:
+            return "review"
+        return "document" if plan.get("needs_docs") else "respond"
