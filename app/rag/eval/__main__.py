@@ -4,6 +4,9 @@
   run       --repo PATH --dataset FILE [options]          run an experiment and write JSON + Markdown under --out
   generate  --repo PATH -n 50 --out FILE                 synthesise questions with the configured LLM
   show      RESULT.json                                  print a saved result as a table
+  agent     --repo PATH --cases FILE [--provider mock|gemini|openai]   run the agent on labelled bug cases and report outcome metrics
+                                                         (root-cause accuracy, citation validity, patch success, regression effectiveness).
+                                                         With the mock provider only retrieval is measured; the output says so.
 
 run options:
   --preset offline                      hash embeddings × {BM25 only, vector, hybrid, hybrid + heuristic rerank}   (no network, no keys)
@@ -31,6 +34,42 @@ def _index(repo: Path):
     return build_index(repo, get_embedder("hash"))
 
 
+def _agent(repo: Path, a) -> int:
+    """Run the agent (the /debug workflow, in a throw-away copy) over labelled cases and score the outcomes. Cost: one agent run per case."""
+    from ...agent.run import run_task, run_summary
+    from ...agent.tools import RepoTools
+    from ...features import _sources
+    from ...llm import get_llm
+    from . import agent_metrics as am
+    llm = get_llm(a.provider)
+    cases = am.load_cases(a.cases)[: a.limit or None]
+    if not cases:
+        print("no cases found", file=sys.stderr)
+        return 2
+    s = get_settings()
+    index = _index(repo)
+    tools = RepoTools(repo, index, s.test_timeout, llm=llm)
+    rows = []
+    for c in cases:
+        print(f"\r{c['id']} ({len(rows) + 1}/{len(cases)})   ", end="", file=sys.stderr)
+        try:
+            st = run_task(llm, tools, s, mode=c.get("mode", "debug"), text=c["question"], allow_fix=llm.name != "mock", allow_verify=llm.name != "mock", engine="simple")
+            run = {"sources": _sources(st["context"], str(st.get("analysis") or "")), "analysis": st.get("analysis") or {}, "citations": {},
+                   "patch_files": st.get("patch_files") or [], "verification": st.get("verification"), "regression": st.get("regression")}
+        except Exception as e:      # a failed run is a failed case, not a crash of the benchmark
+            run = {"sources": [], "analysis": {}, "patch_files": [], "error": f"{type(e).__name__}: {e}"[:200]}
+        rows.append(am.score_case(c, run))
+    print(file=sys.stderr)
+    prov = am.provenance(llm.name, "hash")
+    agg = am.aggregate(rows, prov)
+    out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
+    path = out / f"agent_{prov['kind']}_{repo.name}.json"
+    path.write_text(json.dumps({"aggregate": agg, "rows": rows}, indent=2))
+    print(am.to_markdown(agg))
+    print(f"saved: {path}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="python -m app.rag.eval", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -43,12 +82,16 @@ def main(argv: list[str] | None = None) -> int:
     g = sub.add_parser("generate"); g.add_argument("--repo", required=True); g.add_argument("-n", type=int, default=30)
     g.add_argument("--out", required=True); g.add_argument("--seed", type=int, default=0)
     s = sub.add_parser("show"); s.add_argument("result")
+    ag = sub.add_parser("agent"); ag.add_argument("--repo", required=True); ag.add_argument("--cases", required=True)
+    ag.add_argument("--provider", default=None); ag.add_argument("--out", default="data/experiments"); ag.add_argument("--limit", type=int, default=0)
     a = ap.parse_args(argv)
 
     if a.cmd == "show":
         print(to_markdown(json.loads(Path(a.result).read_text())))
         return 0
     repo = Path(a.repo).resolve()
+    if a.cmd == "agent":
+        return _agent(repo, a)
     if a.cmd == "validate":
         ds = load_dataset(a.dataset)
         problems = validate(ds, _index(repo))

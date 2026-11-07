@@ -145,3 +145,40 @@ def extract_citations(text: str, n_items: int) -> dict:
             if n not in bucket:
                 bucket.append(n)
     return {"cited": sorted(cited), "invalid": sorted(invalid)}
+
+
+# ---- file:line references written by the model ------------------------------------------------------------------------
+_REF = re.compile(r"(?<![\w/.\-])((?:[\w.\-]+/)*[\w.\-]+\.(?:py|js|jsx|ts|tsx|java|go|rs|c|cc|cpp|h|hpp|cs|rb|php|kt|swift|sql|ya?ml|json|toml|md))"
+                  r"(?::|\s+line\s+|\s+lines\s+|#L)(\d{1,6})(?:\s*[-\u2013]\s*L?(\d{1,6}))?")
+
+
+def check_file_refs(text: str, chunks: list[dict], line_count=None) -> dict:
+    """Check every `path:line` / `path:start-end` the answer mentions against what the model was actually shown.
+      grounded     the file and line fall inside a retrieved snippet
+      unretrieved  the file exists and the line is inside it, but the model was never shown that code (weak support)
+      invalid      the file is unknown, or the line is past the end of the file (fabricated or stale reference)
+    `line_count(path) -> int | None` tells how long a repository file is (None = no such file). Code spans are not ignored on purpose:
+    `foo.py:12` inside backticks is still a claim about the code."""
+    grounded: list[str] = []
+    unretrieved: list[str] = []
+    invalid: list[str] = []
+    by_file: dict[str, list[tuple[int, int]]] = {}
+    for c in chunks:
+        by_file.setdefault(c["file"], []).append((int(c["start"]), int(c["end"])))
+    for m in _REF.finditer(text or ""):
+        path, a, b = m.group(1), int(m.group(2)), m.group(3)
+        lo, hi = a, int(b) if b else a
+        ref = f"{path}:{lo}" + (f"-{hi}" if hi != lo else "")
+        spans = by_file.get(path)
+        if spans is None:   # maybe the model wrote a suffix of the path (`eta.py:10` for `services/eta.py`)
+            match = [f for f in by_file if f.endswith("/" + path)]
+            path = match[0] if len(match) == 1 else path
+            spans = by_file.get(path)
+        if spans and any(s <= lo and hi <= e for s, e in spans):
+            bucket = grounded
+        else:
+            n = line_count(path) if line_count else None
+            bucket = unretrieved if (n is not None and 1 <= lo <= hi <= n) else invalid
+        if ref not in bucket:
+            bucket.append(ref)
+    return {"grounded": grounded, "unretrieved": unretrieved, "invalid": invalid}
