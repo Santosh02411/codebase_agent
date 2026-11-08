@@ -24,8 +24,8 @@
 {"id": "a23", "question": "How are embedding API requests retried when the provider rate limits us?", "relevant": [{"file": "app/rag/embedders.py", "symbol": "post_json"}], "tags": ["paraphrase"]}
 {"id": "a24", "question": "Where is the Google Gemini embedding client?", "relevant": [{"file": "app/rag/embedders.py", "symbol": "GeminiEmbedder"}], "tags": ["locate"]}
 {"id": "a25", "question": "How is the embedding provider chosen from a name like openai:text-embedding-3-small?", "relevant": [{"file": "app/rag/embedders.py", "symbol": "get_embedder"}, {"file": "app/rag/embedders.py", "symbol": "parse_spec"}], "tags": ["paraphrase", "multi"]}
-{"id": "a26", "question": "How does the agent decide whether it needs to retrieve more context before answering?", "relevant": [{"file": "app/agent/nodes.py", "symbol": "AgentRuntime.analyze"}], "tags": ["locate"]}
-{"id": "a27", "question": "Where is a proposed fix checked by running the test suite before and after?", "relevant": [{"file": "app/agent/nodes.py", "symbol": "AgentRuntime.verify"}], "tags": ["paraphrase"]}
+{"id": "a26", "question": "How does the agent decide whether it needs to retrieve more context before answering?", "relevant": [{"file": "app/agent/specialists.py", "symbol": "Debugger.run"}], "tags": ["locate"]}
+{"id": "a27", "question": "Where is a proposed fix checked by running the test suite before and after?", "relevant": [{"file": "app/agent/specialists.py", "symbol": "Tester.run"}], "tags": ["paraphrase"]}
 {"id": "a28", "question": "What tools can the agent call to inspect a repository?", "relevant": [{"file": "app/agent/tools.py", "symbol": "RepoTools"}], "tags": ["locate"]}
 {"id": "a29", "question": "How is the final answer text assembled from the root cause and the suggested fix?", "relevant": [{"file": "app/agent/nodes.py", "symbol": "AgentRuntime.respond"}], "tags": ["paraphrase"]}
 {"id": "a30", "question": "How is the agent's progress streamed live to the browser?", "relevant": [{"file": "app/main.py", "symbol": "agent_stream"}, {"file": "app/instrument.py", "symbol": "instrument"}], "tags": ["locate", "multi"]}
