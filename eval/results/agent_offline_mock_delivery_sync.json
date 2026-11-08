@@ -1,0 +1,83 @@
+{
+  "aggregate": {
+    "cases": 4,
+    "provenance": {
+      "llm": "mock",
+      "embedder": "hash",
+      "store": "memory",
+      "kind": "offline-mock",
+      "measures": "retrieval only (no root-cause analysis or patches were produced by a model)"
+    },
+    "retrieval_hit_rate": 1.0,
+    "root_cause_file_accuracy": null,
+    "root_cause_function_accuracy": null,
+    "citation_validity": null,
+    "expected_file_cited_rate": null,
+    "patch_success_rate": null,
+    "patches_produced": null,
+    "regression_effectiveness": null,
+    "regression_tests_written": null,
+    "notes": [
+      "offline/mock run: root-cause, patch and regression metrics are null because no model produced them",
+      "no case produced a citation, so citation_validity is null"
+    ]
+  },
+  "rows": [
+    {
+      "id": "a01",
+      "retrieval_hit": true,
+      "localized_file": true,
+      "localized_function": false,
+      "cited_expected": null,
+      "invalid_citations": 0,
+      "total_citations": 0,
+      "patch_produced": false,
+      "verification": null,
+      "patch_success": null,
+      "regression_present": false,
+      "regression_effective": null
+    },
+    {
+      "id": "a02",
+      "retrieval_hit": true,
+      "localized_file": false,
+      "localized_function": false,
+      "cited_expected": null,
+      "invalid_citations": 0,
+      "total_citations": 0,
+      "patch_produced": false,
+      "verification": null,
+      "patch_success": null,
+      "regression_present": false,
+      "regression_effective": null
+    },
+    {
+      "id": "a03",
+      "retrieval_hit": true,
+      "localized_file": true,
+      "localized_function": false,
+      "cited_expected": null,
+      "invalid_citations": 0,
+      "total_citations": 0,
+      "patch_produced": false,
+      "verification": null,
+      "patch_success": null,
+      "regression_present": false,
+      "regression_effective": null
+    },
+    {
+      "id": "a04",
+      "retrieval_hit": true,
+      "localized_file": true,
+      "localized_function": false,
+      "cited_expected": null,
+      "invalid_citations": 0,
+      "total_citations": 0,
+      "patch_produced": false,
+      "verification": null,
+      "patch_success": null,
+      "regression_present": false,
+      "regression_effective": null
+    }
+  ]
+}

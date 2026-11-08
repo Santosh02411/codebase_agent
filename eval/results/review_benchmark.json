@@ -1,0 +1,619 @@
+{
+  "results": {
+    "cases": 54,
+    "found": 54,
+    "right_line": 53,
+    "by_category": {
+      "Python": {
+        "cases": 38,
+        "found": 38,
+        "right_line": 38
+      },
+      "JavaScript / React": {
+        "cases": 12,
+        "found": 12,
+        "right_line": 11
+      },
+      "Data & markup": {
+        "cases": 4,
+        "found": 4,
+        "right_line": 4
+      }
+    },
+    "rows": [
+      {
+        "name": "missing colon after def",
+        "category": "Python",
+        "expected": "PY-SYNTAX @ m.py:1",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "PY-SYNTAX"
+        ]
+      },
+      {
+        "name": "unclosed parenthesis",
+        "category": "Python",
+        "expected": "PY-SYNTAX @ m.py:2",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "PY-SYNTAX"
+        ]
+      },
+      {
+        "name": "extra closing parenthesis",
+        "category": "Python",
+        "expected": "PY-SYNTAX @ m.py:2",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "PY-SYNTAX"
+        ]
+      },
+      {
+        "name": "misspelled keyword (retrun)",
+        "category": "Python",
+        "expected": "PY-SYNTAX @ m.py:2",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "PY-SYNTAX"
+        ]
+      },
+      {
+        "name": "bad indentation",
+        "category": "Python",
+        "expected": "PY-SYNTAX @ m.py:3",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "PY-SYNTAX"
+        ]
+      },
+      {
+        "name": "unterminated string",
+        "category": "Python",
+        "expected": "PY-SYNTAX @ m.py:1",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "PY-SYNTAX"
+        ]
+      },
+      {
+        "name": "missing comma in call",
+        "category": "Python",
+        "expected": "PY-SYNTAX @ m.py:1",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "PY-SYNTAX"
+        ]
+      },
+      {
+        "name": "undefined variable",
+        "category": "Python",
+        "expected": "PY-UNDEFINED @ m.py:2",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "PY-UNDEFINED"
+        ]
+      },
+      {
+        "name": "misspelled loop variable",
+        "category": "Python",
+        "expected": "PY-UNDEFINED @ m.py:3",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "PY-UNDEFINED"
+        ]
+      },
+      {
+        "name": "misspelled function call",
+        "category": "Python",
+        "expected": "PY-UNDEFINED @ m.py:5",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "PY-UNDEFINED"
+        ]
+      },
+      {
+        "name": "Python 2 leftover (xrange)",
+        "category": "Python",
+        "expected": "PY-UNDEFINED @ m.py:1",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "PY-UNDEFINED"
+        ]
+      },
+      {
+        "name": "self attribute typo",
+        "category": "Python",
+        "expected": "PY-ATTR @ m.py:5",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "PY-ATTR"
+        ]
+      },
+      {
+        "name": "stdlib attribute typo",
+        "category": "Python",
+        "expected": "PY-MODATTR @ m.py:2",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "PY-MODATTR"
+        ]
+      },
+      {
+        "name": "math function typo",
+        "category": "Python",
+        "expected": "PY-MODATTR @ m.py:2",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "PY-MODATTR"
+        ]
+      },
+      {
+        "name": "import of a name that does not exist",
+        "category": "Python",
+        "expected": "PY-IMPORT @ m.py:1",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "PY-IMPORT"
+        ]
+      },
+      {
+        "name": "import of a module that does not exist",
+        "category": "Python",
+        "expected": "PY-IMPORT @ m.py:1",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "PY-IMPORT"
+        ]
+      },
+      {
+        "name": "too many arguments",
+        "category": "Python",
+        "expected": "PY-ARITY @ m.py:5",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "PY-ARITY"
+        ]
+      },
+      {
+        "name": "missing argument",
+        "category": "Python",
+        "expected": "PY-ARITY @ m.py:5",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "PY-ARITY"
+        ]
+      },
+      {
+        "name": "misspelled keyword argument",
+        "category": "Python",
+        "expected": "PY-ARITY @ m.py:5",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "PY-ARITY"
+        ]
+      },
+      {
+        "name": "wrong arity across files",
+        "category": "Python",
+        "expected": "PY-ARITY @ m.py:4",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "PY-ARITY"
+        ]
+      },
+      {
+        "name": "self method called without argument",
+        "category": "Python",
+        "expected": "PY-ARITY @ m.py:5",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "PY-ARITY"
+        ]
+      },
+      {
+        "name": "method without self",
+        "category": "Python",
+        "expected": "PY-NOSELF @ m.py:2",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "PY-NOSELF"
+        ]
+      },
+      {
+        "name": "division by literal zero",
+        "category": "Python",
+        "expected": "PY-DIVZERO @ m.py:2",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "PY-DIVZERO"
+        ]
+      },
+      {
+        "name": "assert on a tuple",
+        "category": "Python",
+        "expected": "PY-ASSERT @ m.py:2",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "PY-ASSERT"
+        ]
+      },
+      {
+        "name": "string plus number",
+        "category": "Python",
+        "expected": "PY-TYPEMIX @ m.py:1",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "PY-TYPEMIX"
+        ]
+      },
+      {
+        "name": "mutable default argument",
+        "category": "Python",
+        "expected": "PY-MUTDEF @ m.py:1",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "PY-MUTDEF"
+        ]
+      },
+      {
+        "name": "function defined twice",
+        "category": "Python",
+        "expected": "PY-REDEF @ m.py:5",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "PY-REDEF"
+        ]
+      },
+      {
+        "name": "unreachable code",
+        "category": "Python",
+        "expected": "PY-UNREACHABLE @ m.py:3",
+        "found": true,
+        "right_line": true,
+        "got": []
+      },
+      {
+        "name": "duplicate dict key",
+        "category": "Python",
+        "expected": "PY-DUPKEY @ m.py:1",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "PY-DUPKEY"
+        ]
+      },
+      {
+        "name": "format placeholder count",
+        "category": "Python",
+        "expected": "PY-FORMAT @ m.py:1",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "PY-FORMAT"
+        ]
+      },
+      {
+        "name": "is with a literal",
+        "category": "Python",
+        "expected": "PY-ISLIT @ m.py:2",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "PY-ISLIT",
+          "PY-WARN"
+        ]
+      },
+      {
+        "name": "bare except",
+        "category": "Python",
+        "expected": "PY-BAREEXCEPT @ m.py:3",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "PY-BAREEXCEPT",
+          "PY-SWALLOW"
+        ]
+      },
+      {
+        "name": "shell=True",
+        "category": "Python",
+        "expected": "PY-SHELL @ m.py:2",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "PY-SHELL"
+        ]
+      },
+      {
+        "name": "SQL injection by concatenation",
+        "category": "Python",
+        "expected": "PY-SQLI @ m.py:2",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "PY-SQLI"
+        ]
+      },
+      {
+        "name": "yaml.load without a loader",
+        "category": "Python",
+        "expected": "PY-YAML @ m.py:2",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "PY-YAML"
+        ]
+      },
+      {
+        "name": "hard-coded password",
+        "category": "Python",
+        "expected": "SECRET @ m.py:1",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "SECRET"
+        ]
+      },
+      {
+        "name": "hard-coded API token in a class",
+        "category": "Python",
+        "expected": "SECRET @ m.py:2",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "SECRET"
+        ]
+      },
+      {
+        "name": "TLS verification disabled",
+        "category": "Python",
+        "expected": "PY-TLS @ m.py:2",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "PY-TLS"
+        ]
+      },
+      {
+        "name": "import path typo",
+        "category": "JavaScript / React",
+        "expected": "JS-IMPORT @ src/A.jsx:1",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "JS-IMPORT"
+        ]
+      },
+      {
+        "name": "name that the module does not export",
+        "category": "JavaScript / React",
+        "expected": "JS-EXPORT @ src/A.jsx:1",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "JS-EXPORT"
+        ]
+      },
+      {
+        "name": "package name typo",
+        "category": "JavaScript / React",
+        "expected": "JS-PACKAGE @ src/A.jsx:1",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "JS-PACKAGE"
+        ]
+      },
+      {
+        "name": "misspelled component",
+        "category": "JavaScript / React",
+        "expected": "JS-UNDEFINED @ src/A.jsx:2",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "JS-UNDEFINED"
+        ]
+      },
+      {
+        "name": "hook used without import",
+        "category": "JavaScript / React",
+        "expected": "JS-UNDEFINED @ src/A.jsx:1",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "JS-UNDEFINED"
+        ]
+      },
+      {
+        "name": "misspelled variable in JSX",
+        "category": "JavaScript / React",
+        "expected": "JS-UNDEFINED @ src/A.jsx:2",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "JS-UNDEFINED"
+        ]
+      },
+      {
+        "name": "unclosed JSX expression",
+        "category": "JavaScript / React",
+        "expected": "JS-SYNTAX @ src/A.jsx:2",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "JS-SYNTAX"
+        ]
+      },
+      {
+        "name": "extra closing brace",
+        "category": "JavaScript / React",
+        "expected": "JS-SYNTAX @ src/A.jsx:4",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "JS-SYNTAX"
+        ]
+      },
+      {
+        "name": "missing closing brace",
+        "category": "JavaScript / React",
+        "expected": "JS-SYNTAX @ src/A.jsx:3",
+        "found": true,
+        "right_line": false,
+        "got": [
+          "JS-SYNTAX"
+        ]
+      },
+      {
+        "name": "assignment inside a condition",
+        "category": "JavaScript / React",
+        "expected": "JS-ASSIGNCOND @ src/A.jsx:2",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "JS-ASSIGNCOND"
+        ]
+      },
+      {
+        "name": "empty catch",
+        "category": "JavaScript / React",
+        "expected": "JS-EMPTYCATCH @ src/A.jsx:2",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "JS-EMPTYCATCH"
+        ]
+      },
+      {
+        "name": "debugger left in",
+        "category": "JavaScript / React",
+        "expected": "JS-DEBUGGER @ src/A.jsx:2",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "JS-DEBUGGER"
+        ]
+      },
+      {
+        "name": "trailing comma in JSON",
+        "category": "Data & markup",
+        "expected": "JSON-SYNTAX @ d.json:1",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "JSON-SYNTAX"
+        ]
+      },
+      {
+        "name": "unclosed HTML tag",
+        "category": "Data & markup",
+        "expected": "HTML-UNCLOSED @ i.html:1",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "HTML-UNCLOSED"
+        ]
+      },
+      {
+        "name": "bad YAML indentation",
+        "category": "Data & markup",
+        "expected": "YAML-SYNTAX @ c.yaml:3",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "YAML-SYNTAX"
+        ]
+      },
+      {
+        "name": "unclosed CSS rule",
+        "category": "Data & markup",
+        "expected": "BRACE @ s.css:1",
+        "found": true,
+        "right_line": true,
+        "got": [
+          "BRACE"
+        ]
+      }
+    ],
+    "clean_cases": [
+      {
+        "name": "valid Python with classes, closures and comprehensions",
+        "false_positives": []
+      },
+      {
+        "name": "constants named like secrets that are not secrets",
+        "false_positives": []
+      },
+      {
+        "name": "valid dataclass",
+        "false_positives": []
+      },
+      {
+        "name": "valid *args / **kwargs call",
+        "false_positives": []
+      },
+      {
+        "name": "valid try/except import fallback",
+        "false_positives": []
+      },
+      {
+        "name": "valid React component with hooks",
+        "false_positives": []
+      }
+    ],
+    "clean_false_positives": 0,
+    "seconds": 0.09
+  },
+  "corpus": [
+    {
+      "path": "app",
+      "files": 130,
+      "ms": 1712,
+      "high": 0,
+      "medium": 4,
+      "low": 51,
+      "high_medium_findings": [
+        "llm/base.py:90 PY-SWALLOW",
+        "llm/gemini_llm.py:42 PY-SWALLOW",
+        "llm/gemini_llm.py:56 PY-SWALLOW",
+        "review/pycheck.py:574 PY-SWALLOW"
+      ]
+    },
+    {
+      "path": "frontend/src",
+      "files": 118,
+      "ms": 1675,
+      "high": 0,
+      "medium": 0,
+      "low": 21,
+      "high_medium_findings": []
+    }
+  ]
+}
