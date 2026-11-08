@@ -1,98 +1,80 @@
 # Progress Tracker
 
-**Current version:** v4 · **Last updated:** 2026-10-08
+**Current version:** v21 (CodeScout AI: review-first interface, paste-code review, exports, CLI, benchmark, full documentation) · **Last updated:** 2026-11-04
 
-Legend: ✅ done & tested · 🟡 implemented, not yet verified with real services · ⬜ not started
+Legend: **Implemented** = code exists · **Tested** = covered by the offline test suite (scripted LLM, local sandbox, fake docker) · **Validated** = run against a real service (real LLM, real Docker, real GitHub, browser).
 
-## Status by phase
-| Phase | Status |
-|---|---|
-| 1 Foundations | 🟡 mostly done (needs real-key smoke test) |
-| 2 Repo ingestion + Code RAG | 🟡 done on local store; pgvector pending |
-| 3 Code intelligence | 🟡 Python done; Tree-sitter pending |
-| 4 Agent | 🟡 workflow done; native function-calling pending |
-| 5 Debugging | 🟡 core loop done; stack-trace parsing pending |
-| 6 Execution | 🟡 subprocess sandbox done; Docker sandbox pending |
-| 7 Product & production | 🟡 API + basic web UI; DB, auth, Next.js pending |
-| 8 Evaluation & observability | 🟡 retrieval metrics only |
+## Test status
+Offline suite: 480 passed, 38 skipped, 0 failed (32 test files, run in two groups on 2026-11-03 in a sandbox with `coverage` installed). Skips are tests that need optional services or packages missing there (e.g. PostgreSQL). Nothing below is "Validated" unless stated.
 
-## Done
-### Added in v4
-- ✅ Architecture overview (`/architecture`): folders, routes, internal import graph, deps; works offline, AI writes the narrative
-- ✅ Code review (`/review`): AST/regex checks (bare except, mutable defaults, eval/exec, hard-coded secrets, long functions, TODOs) + AI findings
-- ✅ Multi-file change engine (`/change`): edits + new files validated together, tested before/after in the sandbox, retried with test feedback, applied with `/apply-changes`
-- ✅ Test generation (`/generate-tests`): one new test file, verified in the sandbox
-- ✅ GitHub PR (`/create-pr`): branch + commits via the GitHub contents API, explicit `confirm`, token stays on the server
-- ✅ UI: 7 modes, review list, multi-file diff view, Apply and Open-pull-request buttons, code viewer (`/repositories/{id}/file`)
-- 🟡 PR flow tested against a mocked GitHub only; real-LLM quality of change/test/review prompts unmeasured
+## Capability matrix
+| Capability | Implemented | Tested offline | Validated with real services |
+|---|---|---|---|
+| Ingest (GitHub URL, ZIP, folder), incremental indexing, symlinks never followed | yes | yes | git clone path not run here |
+| Code intelligence (ast + Tree-sitter ×8, call/import/inheritance graphs, impact) | yes | yes | no |
+| Hybrid RAG (vectors + BM25 + RRF + rerank), pgvector store | yes | in-memory yes; pgvector tests skipped here | no |
+| LLM layer (OpenAI/Gemini/mock, retries, fallback, JSON repair, tools, usage) | yes | scripted LLM only | **no real-provider run** |
+| LangGraph agent, 18 tools, reflection loops, conversation memory | yes | yes | no |
+| Debugging report, reproduction, regression-test verification | yes | yes | no |
+| Multi-file patch engine, approval, revert, repair | yes | yes | no |
+| Docker sandbox, fail-closed | yes | fake docker | **no real Docker run** |
+| Quality dashboard (10 analyzers, coverage, score) | yes | yes | tools run in this environment only where installed |
+| GitHub OAuth, PR analysis/review, issue fix, PR creation | yes | mocked GitHub | **no real GitHub run** |
+| Next.js IDE | yes | API only | **not clicked through in a browser** |
+| Evaluation harness (retrieval + agent outcomes) | yes | yes | offline/mock results only |
 
-- ✅ P1.1 Project skeleton, env-based config
-- ✅ P1.2 LLM abstraction `get_llm(provider)` with offline `mock` provider (Gemini/OpenAI classes written — see "Written but untested")
-- ✅ P1.3 JSON extraction from LLM output (handles code fences / extra prose)
-- ✅ P2.1 Ingest from GitHub URL (validated), local path (opt-in), zip upload (zip-slip safe) — URL clone path not exercised in tests (no network in tests)
-- ✅ P2.2 File scan, requirements.txt / package.json parsing
-- ✅ P2.3/P3.1 AST-aware Python chunking (functions, methods, class headers, module code); regex-based JS/TS chunking; line-window fallback
-- ✅ P2.4 Hashing embedder (offline)
-- ✅ P2.5 Hybrid search: BM25 + vectors + Reciprocal Rank Fusion, identifier- and stem-aware tokenizer
-- ✅ P2.6 Lexical reranker (term coverage + symbol/path match)
-- ✅ P3.2 Call graph (callers/callees) used to expand retrieved context
-- ✅ P3.3 Python import → internal file resolution
-- ✅ P4.1–P4.4 Agent state, query analysis, retrieve ⇄ analyze loop, tools, LangGraph workflow (+ built-in runner; both tested)
-- ✅ P5.2/P5.3 Root-cause analysis and validated search/replace patch + unified diff
-- ✅ P6.1/P6.2 Tests run in temp copy before and after patch; retry with test-failure feedback
-- ✅ P7.1 REST API: /repositories, /upload, /search, /chat, /debug, /generate-fix, /run-tests, /apply-patch, /runs
-- ✅ P8.1 Retrieval metrics (recall@k, precision@k, MRR) + 5-question dataset
-- ✅ Test suite: 30 tests passing (parsing, retrieval, large-repo regression, agent on both engines, API incl. zip upload, eval)
+## Added in v13 (each has regression tests in `tests/test_v13_hardening.py`)
+- Review findings: severity, confidence, evidence, remediation; fewer false positives (placeholder secrets, constant `eval`, test fixtures); deduplication; AI findings grounded against real lines.
+- Patch guard: patches that swallow exceptions or add `noqa`/`type: ignore`/`nosec` are rejected without a model call.
+- Prompt-injection hardening: untrusted-data rule in all prompts, injection-pattern flagging and labelling, secret masking in context.
+- Citation checks for `file:line` references (grounded / unretrieved / invalid) with a warning on invalid ones.
+- Symlink safety in indexing and local copy.
+- Tool failures reported as `TOOL FAILED`; any tool exception handled; `MAX_RUN_SECONDS` limit and cancel hook in the runtime.
+- Verification fixes: regression "passed after" requires the tests to have run; regression tests that fail only on a missing symbol do not count as reproduction; tests not run are never "fixed".
+- Test selection from changed files and the import graph with a fast targeted gate.
+- Agent-outcome metrics (`python -m app.rag.eval agent`): root-cause accuracy, citation validity, patch success, regression effectiveness, with offline-mock vs real-provider labelling.
 
-### Added in v3
-- ✅ **Web UI** served by the API at `/` (no Node/npm needed): upload zip or add GitHub URL, pick project, file browser, Search / Ask / Find-bug-and-fix modes, agent step timeline, sources, colored diff, before/after test verdict, Apply-fix and Run-tests buttons
-- ✅ Retrieval: import-heavy chunks down-weighted; backend vs frontend bias from the wording of the question; HTTP-method words boost matching routes; regression test for "POST endpoint for bulk import" (backend handler must beat the frontend client function)
-- 🟡 UI is a single static HTML page, tested for JS syntax and that it is served — not clicked through in a real browser by me. Next.js UI (P7.4) is still planned if a bigger app is wanted
+## Web app redesign (v14)
+Implemented: application shell (collapsible sidebar, topbar, project switcher, Ctrl+K command palette, notifications built from real conditions, profile/GitHub menu, live indexing status), design system, dark and light themes (persisted, no flash), and pages for dashboard, AI chat with real-event agent timeline, code explorer, interactive architecture graphs (React Flow), debugging, review, quality, patches, testing, GitHub and settings. Details: `frontend/README.md`. Served by the backend at `/` from the static export in `app/webapp` (rebuild with `scripts/build_frontend.sh`); the previous single-page UI is at `/classic` and the multi-tab IDE at `/workbench`.
+Verified: `tsc --noEmit` and `next build` pass; every route returns 200 from the production server; the API endpoints the new pages call were exercised against a running backend with the offline mock (stats, tree, symbols, symbol detail, module/call/impact graphs, patches, quality, sandbox, auth, and the `/agent/stream` event shapes).
+**Not verified:** no real browser session was available, so the UI has not been clicked through, visually inspected or tested at different screen sizes; Monaco, React Flow interaction, chart rendering, theme switching, and the layout of every page are unverified in a browser. No accessibility audit with assistive technology. No frontend unit or end-to-end tests exist yet. Chat history is session-only. Answers are not token-streamed (the backend streams events, not tokens).
 
-### Added in v2 (from first real-repo run: 355 files / 2,796 chunks)
-- ✅ Retrieval priors: docs, tests and config files are down-weighted unless the question asks for them; functions/methods outrank loose text blocks
-- ✅ HTTP route metadata (`POST /deliveries`) extracted from FastAPI/Flask-style decorators (incl. router prefixes) and used in search + reranking + LLM context
-- ✅ Stemmer handles `deliveries → delivery`
-- ✅ `.env` now loads automatically (python-dotenv); tests are isolated from a developer's real `.env`
-- ✅ Fixed zip upload (`SpooledTemporaryFile` error); zip upload test added
-- ✅ Mock LLM no longer generates noisy single-word queries
+## v21: review first
+Code Review is the second sidebar item and has a **Review code** button and a live summary card at the top of the dashboard. Added: paste-code review, report export (Markdown, SARIF, JSON), command-line mode with exit codes for CI (`python -m app.review`), a measured benchmark (`python -m app.review.bench`: 53/53 seeded mistakes found, 0 high/medium false alarms on 247 files of working code), demo projects with deliberate mistakes (`examples/`), full README and docs (REVIEW_ENGINE.md, DEMO.md). Product renamed CodeScout AI.
 
-## Written but untested
-- 🟡 Gemini / OpenAI LLM classes and OpenAI / Gemini embedders — need API keys; default model names may be outdated, set `LLM_MODEL`
-- 🟡 Real-LLM behaviour of the prompts (tests use a scripted LLM, so patch *quality* from a real model is unmeasured)
-- 🟡 `git clone` path for GitHub URLs
+## v19
+- **Review understands React/JS projects:** import paths that do not resolve, named/default imports a module does not export, packages missing from package.json (typos like `reactt`), undefined identifiers, JSX components and hooks (`useSate`, `<Hedaer />`), precise location of unclosed JSX expressions. Validated on this project's own 138-file React/TypeScript frontend: 0 high/medium findings (no false positives), 1.8 s.
+- **System map is component-level** (one box per code folder, one labelled arrow per pair), non-code files excluded; **Execution flow** has a dropdown of routes/entry points/most-called/all functions with search, and follows React components a function renders; **File structure** lists the complete working copy (assets, configs, docs), not only parsed code.
+- **Faster runs:** default LLM timeout 30 s (was 60), 2 retries (was 3); an overloaded Gemini model triggers an immediate one-off try of the next-best model; plain Explain questions skip the two planning model calls (`FAST_PLANNING=false` restores them). In a real run the planning calls plus timeouts were ~125 s of 275 s.
 
-## Observed on first real repo (v1) — and status
-- Search on "where is delivery creation handled" returned FEATURE_LOG.md blocks, refund code and an unrelated screen instead of the create-delivery route → fixed by v2 priors/route metadata **on a synthetic repo; not yet re-measured on the real Delivery_Sync repo**
-- Mock LLM `/debug` returns `no_fix` as expected (needs a real LLM to write a patch)
+## v17: strict review, readable diagrams, fixes
+- **Strict review engine** (`app/review/`, `POST /repositories/{id}/review/static`, ~1 s for 100+ files, no model): Python via the real compiler plus a scope analyser (undefined names/typos with "did you mean", `self.x` attribute typos, standard-library attribute typos, imports of names/modules that do not exist in the project, wrong call arguments and unknown keywords, unused imports/variables, redefinitions, unreachable code, bug patterns, security rules, hard-coded secrets on the syntax tree); JS/TS/Java/Go/Rust/C/C++ syntax errors from Tree-sitter (missing/extra braces, brackets, quotes) plus JS pattern rules and probable misspellings; JSON, YAML, TOML, HTML, CSS structure. Every file is analysed (the old review looked at the first 40 files with a handful of patterns). Results state what was analysed per language and what static analysis cannot see.
+- **Validated against false positives:** run on this project's own `app/` (126 files of working code): 0 high-severity findings.
+- **Source sync:** the server reviews its COPY of the project. `GET /repositories/{id}/source-status` lists files changed in your original folder since import; `POST /repositories/{id}/refresh` re-copies (or re-clones) and re-indexes. The review page warns when your folder has changed. (Previously "Re-index" re-indexed the stale copy, so edits made in the original folder were never seen.)
+- **Diagrams for understanding:** System map (components grouped by explicit role rules, arrows labelled with imported names / called functions), Execution flow (UML-style sequence diagram + flowchart from the real call order, `GET /repositories/{id}/flow`), File structure tree with parser annotations; 3D labels are now fixed-size and legible, with a folder jump menu.
+- **Fixes:** the page no longer freezes after adding/removing a project (Radix menu was leaving `pointer-events: none` on the page; menus are non-modal and a safety net releases the page); IDE view and classic UI now have a "Back" button.
 
-## To do (priority order)
-1. P1.4 Smoke test with a real Gemini/OpenAI key on a real repo; tune prompts
-2. P8.2 Labelled eval set built from the real Delivery_Sync repo (10–20 questions); measure recall@k before/after v2; compare hash vs OpenAI/Gemini embeddings
-3. P5.4 Stack-trace parser → seed retrieval with file:line
-4. P4.5 Native LLM function-calling so the model picks tools freely
-5. P3.4 Tree-sitter parsing for JS/TS/Java/Go; P6.6 non-Python test runners
-6. P6.3 Docker sandbox (no network, CPU/memory limits) — required before any public deployment
-7. P7.2 PostgreSQL + pgvector (replace JSON/pickle), P7.9 background indexing
-8. P3.5 Cross-encoder / LLM reranker
-9. P5.5 Documentation search tool; P6.4 linter; P6.5 git diff tool
-10. P7.8 GitHub API tools (issues, open a PR with the fix)
-11. P7.4 Next.js UI upgrade (basic UI already shipped in v3)
-12. P7.5 JWT auth + RBAC; P7.6 Redis; P7.7 CI; P7.10 deployment
-13. P8.3–P8.6 Faithfulness metrics, agent metrics, LangSmith, dashboard
-14. P4.6 Conversation memory
+## v16: AI-first web app (see docs/FRONTEND_AUDIT.md)
+- **3D architecture explorer** (React Three Fiber): the repository's folders, files, functions/classes, imports, calls, inheritance, tests and routes from the real parsed graph (`GET /repositories/{id}/graph/system`); verified vs inferred edges; enter folders, inspect files/functions, incoming/outgoing highlighting with moving direction markers, path tracing, search, filters, legend and onboarding, 2D fallback, reduced-motion support.
+- **Eight architecture perspectives:** 3D system, folders, files, function calls, request flow, data models, tests-to-source, impact; **Explain with AI** for the architecture or a selected folder/file/symbol (`POST /explain`).
+- **Real testing:** test discovery separate from execution, real command/exit code/stdout/stderr, per-test outcomes, tracebacks with file:line frames, recorded history (executed runs only), explicit "Not executed".
+- **AI project understanding** (`POST /repositories/{id}/overview`): cited explanation from the agent with parser facts as context, cached per index version; refuses to fabricate with the offline mock.
+- **Insights** (`GET /repositories/{id}/insights`): entry points, key modules, hub functions, external packages, untested modules, risks, project-specific suggested questions; no model needed.
+- Backend tests: `tests/test_v16_real_data.py` (9 tests).
 
-## Known limitations (v1)
-- Index and registry are local files; single process
-- Hash embeddings are mostly lexical
-- Only Python projects can be verified with tests (pytest)
-- Patch format is a single search/replace edit per attempt
-- Sandbox is process-level isolation, not a container — do not run untrusted repos on a shared server yet
+## Measured results
+- Retrieval, offline hash embedder, 50 questions: best config MRR 0.339, Recall@5 0.420 (`eval/results/offline_baseline_codebase_agent.md`).
+- Agent outcomes, offline mock, 4 cases on the `delivery_sync` fixture: expected file in context 4/4; all model-dependent metrics n/a (`eval/results/agent_offline_mock_delivery_sync.md`).
+- No real-LLM, real-embedding or patch-success numbers exist yet.
 
-## Version history
-- **v6** — Repository management (GitHub OAuth, URL for GitHub/GitLab/Bitbucket, ZIP; branches, commits, checkout; stats dashboard) and a code-intelligence engine (Python `ast` + Tree-sitter for 8 languages; symbols, imports, APIs, models, tests; call/module/inheritance graphs; impact analysis) with incremental indexing (per-file hash cache + embedding cache). 104 tests.
-- **v5** — Next.js IDE frontend (Monaco, Zustand, TanStack Query); backend adds live agent stream (SSE), symbols, text search, git status/diff/discard/commit, restricted terminal, save-file; `copy_local` recursion fix
-- **v4** — Architecture, review, multi-file changes, test generation, GitHub PRs, modular frontend, 40 tests
-- **v3** — Web UI at `/`, more retrieval priors (imports, backend/frontend, HTTP method), 30 tests
-- **v2** — Retrieval quality fixes for large repos (priors, route metadata, stemming), auto `.env` loading, zip-upload fix, regression tests
-- **v1** — Backend core: ingest, hybrid RAG, AST chunking, call graph, LangGraph agent, debug → patch → verify loop, API, eval, docs, Docker files
+## Remaining limitations
+- Real-provider prompt quality unmeasured; run `python -m app.rag.eval agent ... --provider gemini` and a real-embedder sweep.
+- Real Docker, real GitHub and browser flows unverified.
+- Cancel hook is not wired to an API endpoint. The file-viewer endpoint does not refuse secret files (agent tools do).
+- The exact source shown to the coder is not secret-masked (edits are matched literally).
+- Static call-graph resolution is name-based; dynamic dispatch is only resolved when the name is unique.
+- Single local user; no accounts, RBAC or hosted deployment.
+- Injection pattern-flagging cannot catch every phrasing; approval and the sandbox are the backstops.
+
+## History
+v13 hardening and review/eval work (above) · v12 Docker sandbox, quality dashboard, git intelligence, GitHub workflows · v11 tool system, debugging agent, patch engine · v10 LLM layer and multi-specialist agent · v7 RAG pipeline and experiments · v6 repository management and code intelligence · v5 Next.js IDE · v4 architecture, review, change, tests, PRs · v3 web UI · v2 retrieval fixes · v1 backend core.
