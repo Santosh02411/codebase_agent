@@ -49,13 +49,23 @@ def is_ignored(rel: str, patterns: list[str]) -> bool:
 
 
 def iter_source_files(root: Path):
+    """Indexable files. Symbolic links are never followed: a hostile repository can contain `notes.py -> /etc/passwd` (git keeps symlinks),
+    and indexing it would put a host file into search results and model prompts."""
     ignore = load_ignore(root)
+    base = root.resolve()
     for dirpath, dirs, files in os.walk(root):
-        dirs[:] = sorted(d for d in dirs if d not in SKIP_DIRS)
+        dirs[:] = sorted(d for d in dirs if d not in SKIP_DIRS and not (Path(dirpath) / d).is_symlink())
         for f in sorted(files):
             p = Path(dirpath) / f
+            if p.is_symlink():
+                continue
             rel = p.relative_to(root).as_posix()
             if (p.suffix.lower() in TEXT_EXT or f in TEXT_NAMES) and p.stat().st_size <= MAX_BYTES and not is_ignored(rel, ignore):
+                try:
+                    if base not in p.resolve().parents:
+                        continue
+                except OSError:
+                    continue
                 yield rel, p
 
 
@@ -69,13 +79,15 @@ def build_index(root: Path, embedder=None, cache_dir: Path | None = None, progre
 def clone_repo(url: str, dest: Path, branch: str | None = None, auth_header: str | None = None) -> None:
     """Shallow clone that still knows every branch (so you can switch later). Credentials go via the environment only."""
     url = providers.validate_url(url)
-    cmd = ["git", "clone", "--depth", "1", "--no-single-branch", "-q"]
+    # a repository we have not seen yet is untrusted: no hooks, no submodules, no external transports, no host git config
+    local_ok = url.startswith("file:")      # unreachable in production: validate_url above only admits https URLs; tests substitute file:// remotes
+    cmd = ["git", *gitops.HARDEN, "-c", f"protocol.file.allow={'always' if local_ok else 'never'}", "clone", "--depth", "1", "--no-single-branch", "--no-recurse-submodules", "-q"]
     if branch:
         cmd += ["--branch", gitops._check_ref(branch)]
     if dest.exists():
         shutil.rmtree(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
-    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", **gitops.net_env(auth_header)}
+    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", **gitops.HARD_ENV, **gitops.net_env(auth_header)}
     try:
         r = subprocess.run(cmd + [url, str(dest)], capture_output=True, text=True, timeout=300, env=env)
     except FileNotFoundError:
@@ -86,6 +98,7 @@ def clone_repo(url: str, dest: Path, branch: str | None = None, auth_header: str
         shutil.rmtree(dest, ignore_errors=True)
         tail = (r.stderr.strip().splitlines() or ["clone failed"])[-1]
         raise ValueError(f"git clone failed: {tail[:300]}")
+    (dest / ".git").is_dir() and (dest / ".git" / "agent-sanitized").write_text("1")   # the config is the one git just wrote from a validated URL: nothing untrusted in it
 
 
 def copy_local(src: Path, dest: Path) -> None:
@@ -103,7 +116,7 @@ def copy_local(src: Path, dest: Path) -> None:
         skip |= {n for n in names if (Path(directory) / n).resolve() in guarded}
         return skip
 
-    shutil.copytree(src, dest, ignore=ignore)
+    shutil.copytree(src, dest, ignore=ignore, symlinks=True, ignore_dangling_symlinks=True)   # links stay links: never copy a link's TARGET (possibly outside the source) into the workspace
 
 
 def extract_zip(fileobj, dest: Path) -> None:

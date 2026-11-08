@@ -1,4 +1,5 @@
 from __future__ import annotations
+import os
 import hashlib
 import json
 import re
@@ -153,6 +154,67 @@ class RepoService:
 
     def reindex(self, repo_id: str) -> dict:
         meta, root, _ = self._get_meta_root(repo_id)
+        return self._index(repo_id, meta["name"], meta["source"], root)
+
+    # ---- the original source vs the server's working copy ---------------------------------------------------
+    def _source_dir(self, meta: dict) -> Path | None:
+        src = meta.get("source", "")
+        if src.startswith("https://") or src.startswith("upload:"):
+            return None
+        p = Path(src)
+        return p if p.is_dir() else None
+
+    def source_changes(self, repo_id: str) -> dict:
+        """Files that differ between the folder the project was imported from and the server's working copy. The agent and the reviews read the COPY, so edits made
+        in the original folder are invisible until the project is synced."""
+        import filecmp
+        meta, root, _ = self._get_meta_root(repo_id)
+        src = self._source_dir(meta)
+        if src is None:
+            kind = "git" if meta.get("source", "").startswith("https://") else "upload"
+            return {"syncable": kind == "git", "kind": kind, "changed": [], "count": None,
+                    "note": "This project was imported from a ZIP: import it again to pick up changes." if kind == "upload" else "This project was cloned from a git URL: syncing pulls the latest commit again."}
+        changed: list[dict] = []
+        seen: set[str] = set()
+        for d, dirs, files in os.walk(src):
+            dirs[:] = [x for x in dirs if x not in ingest.SKIP_DIRS and not (Path(d) / x).is_symlink()]
+            for f in files:
+                a = Path(d) / f
+                if a.is_symlink():
+                    continue
+                rel = a.relative_to(src).as_posix(); seen.add(rel)
+                b = root / rel
+                try:
+                    if not b.exists():
+                        changed.append({"file": rel, "change": "added"})
+                    elif a.stat().st_size != b.stat().st_size or not filecmp.cmp(a, b, shallow=False):
+                        changed.append({"file": rel, "change": "modified"})
+                except OSError:
+                    continue
+        for d, dirs, files in os.walk(root):
+            dirs[:] = [x for x in dirs if x not in ingest.SKIP_DIRS and not (Path(d) / x).is_symlink()]
+            for f in files:
+                rel = (Path(d) / f).relative_to(root).as_posix()
+                if rel not in seen and not (src / rel).exists():
+                    changed.append({"file": rel, "change": "deleted"})
+        return {"syncable": True, "kind": "local", "source": str(src), "changed": changed[:60], "count": len(changed)}
+
+    def refresh(self, repo_id: str) -> dict:
+        """Re-copy (or re-clone) the project from its original source, then re-index it."""
+        import shutil
+        meta, root, _ = self._get_meta_root(repo_id)
+        src = self._source_dir(meta)
+        if src is not None:
+            shutil.rmtree(root, ignore_errors=True)
+            ingest.copy_local(src, root)
+        elif meta.get("source", "").startswith("https://"):
+            tmp = root.with_name(root.name + ".new")
+            shutil.rmtree(tmp, ignore_errors=True)
+            ingest.clone_repo(meta["source"], tmp, meta.get("branch") or None, self._header_for(meta["source"]))
+            shutil.rmtree(root, ignore_errors=True)
+            tmp.rename(root)
+        else:
+            raise ValueError("This project was uploaded as a ZIP, so it cannot be synced. Import it again.")
         return self._index(repo_id, meta["name"], meta["source"], root)
 
     # ---- access -------------------------------------------------------------------------------

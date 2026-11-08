@@ -52,6 +52,46 @@ class Settings:
         self.retrieval_candidates = int(os.getenv("RETRIEVAL_CANDIDATES", "50"))
         self.context_token_budget = int(os.getenv("CONTEXT_TOKEN_BUDGET", "6000"))
         self.max_context_chunks = int(os.getenv("MAX_CONTEXT_CHUNKS", "12"))
+        # ---- code execution sandbox (everything that runs repository code goes through app/sandbox_exec.py) ----
+        # docker (default): each run is a throw-away container: no network, CPU/memory/pid limits, read-only root, tmpfs, no capabilities, non-root.
+        # local: runs on THIS machine with rlimits only. Not isolated. For a developer's own laptop and the test-suite, never for a public server.
+        self.sandbox_mode = os.getenv("SANDBOX_MODE", "docker").lower()
+        self.sandbox_cpus = float(os.getenv("SANDBOX_CPUS", "1.0"))
+        self.sandbox_memory_mb = int(os.getenv("SANDBOX_MEMORY_MB", "1024"))
+        self.sandbox_pids = int(os.getenv("SANDBOX_PIDS", "256"))
+        self.sandbox_tmpfs_mb = int(os.getenv("SANDBOX_TMPFS_MB", "256"))
+        self.sandbox_output_limit = int(os.getenv("SANDBOX_OUTPUT_LIMIT", "1000000"))      # bytes of stdout+stderr kept per run
+        self.sandbox_network = os.getenv("SANDBOX_NETWORK", "none").lower()                  # none | bridge (not recommended)
+        self.sandbox_images = {lang: os.getenv(f"SANDBOX_IMAGE_{lang.upper()}", f"codebase-agent/sandbox-{lang}:latest") for lang in ("python", "node", "go", "rust", "java")}
+        self.sandbox_install_deps = os.getenv("SANDBOX_INSTALL_DEPS", "false").lower() in ("1", "true", "yes")   # a separate networked step; no install scripts are run
+        self.sandbox_audit_network = os.getenv("SANDBOX_AUDIT_NETWORK", "false").lower() in ("1", "true", "yes")  # lets pip-audit / npm audit reach their advisory databases
+        self.sandbox_max_concurrent = int(os.getenv("SANDBOX_MAX_CONCURRENT", "2"))            # containers running at once, server-wide; others wait in line
+        self.sandbox_queue_timeout = float(os.getenv("SANDBOX_QUEUE_TIMEOUT", "120"))          # seconds a run may wait for a slot before it is refused as busy
+        self.rate_limit_per_minute = int(os.getenv("RATE_LIMIT_PER_MINUTE", "0"))              # per client, on the endpoints that start agents / run code; 0 = off
+        self.sandbox_cache_dir = Path(os.getenv("SANDBOX_CACHE_DIR", "")) if os.getenv("SANDBOX_CACHE_DIR") else None
+        # ---- LLM layer ----
+        self.llm_fast_model = os.getenv("LLM_MODEL_FAST", "")          # cheaper model for planning / tool selection (falls back to LLM_MODEL)
+        self.llm_temperature = float(os.getenv("LLM_TEMPERATURE", "0.1"))
+        self.llm_max_tokens = int(os.getenv("LLM_MAX_TOKENS", "4096"))
+        self.llm_timeout = float(os.getenv("LLM_TIMEOUT", "30"))
+        self.llm_max_retries = int(os.getenv("LLM_MAX_RETRIES", "2"))
+        # skip the two planning model calls for plain questions (Explain mode): the research step already chooses the tools. Set FAST_PLANNING=false to always plan with the model.
+        self.fast_planning = os.getenv("FAST_PLANNING", "true").lower() not in ("0", "false", "no")
+        self.llm_fallback = os.getenv("LLM_FALLBACK", "")             # "provider[:model]", tried when the primary keeps failing
+        self.llm_prices = os.getenv("LLM_PRICES", "")                 # optional JSON {"model": [usd_per_1M_input, usd_per_1M_output]}
+        self.max_llm_calls = int(os.getenv("MAX_LLM_CALLS", "40"))     # hard cap per agent run
+        # ---- optional web search tool (off unless a provider key is set) ----
+        self.web_search_provider = os.getenv("WEB_SEARCH_PROVIDER", "").lower()   # "brave" | "tavily"; default: whichever key is set
+        self.brave_api_key = os.getenv("BRAVE_API_KEY", "")
+        self.tavily_api_key = os.getenv("TAVILY_API_KEY", "")
+        # ---- agent ----
+        self.max_test_runs = int(os.getenv("MAX_TEST_RUNS", "4"))        # test runs the model may trigger itself, per agent run
+        self.max_tool_calls = int(os.getenv("MAX_TOOL_CALLS", "10"))   # tool calls per research round
+        self.max_tool_iterations = int(os.getenv("MAX_TOOL_ITERATIONS", "5"))  # model turns per research round
+        self.max_agent_total_steps = int(os.getenv("MAX_AGENT_TOTAL_STEPS", "40"))
+        self.max_run_seconds = int(os.getenv("MAX_RUN_SECONDS", "900"))   # wall-clock limit for one agent run (0 = none)
+        self.history_turns = int(os.getenv("HISTORY_TURNS", "4"))
+        self.history_token_budget = int(os.getenv("HISTORY_TOKEN_BUDGET", "900"))
 
 
 def get_settings() -> Settings:

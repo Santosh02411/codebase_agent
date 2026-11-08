@@ -1,11 +1,11 @@
-"""Wraps tools, LLM calls and agent nodes so every action is reported live to the UI (Agent Activity panel)."""
+"""Wraps tools and hooks the LLM layer so every action is reported live to the UI (Agent Activity panel).
+Node start/end events come from the graph itself (agent/graph.py) through `tools.emit`."""
 from __future__ import annotations
 import time
 from typing import Callable
 
 Emit = Callable[[dict], None]
-NODES = ("analyze_query", "retrieve", "analyze", "generate_fix", "verify", "respond")
-TOOLS = ("search_code", "related", "read_file", "find_symbol", "get_dependencies", "list_tree", "run_tests", "callers", "callees", "impact")
+TOOLS = ("search_code", "related", "read_file", "find_symbol", "get_dependencies", "list_tree", "run_tests", "callers", "callees", "impact", "grep", "list_files", "git_status", "git_log", "git_diff", "search_docs", "find_config", "inspect_project", "search_web", "lint", "check_patch", "git_branches", "git_show", "git_blame", "git_file_at", "git_changed_files", "git_authors", "git_history")
 
 
 def _args(name: str, a: tuple, k: dict) -> str:
@@ -31,6 +31,20 @@ def _summary(name: str, res, tools=None) -> tuple[str, list[dict]]:
         return f"{len(str(res).splitlines())} lines", []
     if name == "run_tests":
         return f"{res.get('status')} — {res.get('summary')}", []
+    if name in ("git_status", "git_log", "git_diff", "git_branches", "git_show", "git_blame", "git_file_at", "git_changed_files", "git_authors", "git_history"):
+        return f"{len(str(res).splitlines())} lines", []
+    if name == "search_docs":
+        return f"{len(res)} section{'s' * (len(res) != 1)}", [{"file": h["file"], "lines": f"{h['start']}-{h['end']}", "symbol": h["name"]} for h in res]
+    if name == "find_config":
+        return f"{len(res['matches'])} line(s) in {res['files_scanned']} config files", []
+    if name == "inspect_project":
+        return f"{res['files']} files; {', '.join(res['frameworks'][:4]) or 'no frameworks detected'}", []
+    if name == "search_web":
+        return f"{len(res)} result{'s' * (len(res) != 1)}", []
+    if name == "lint":
+        return f"{res['tool']}: {res['summary']}", []
+    if name == "check_patch":
+        return f"{len(res['lint_new'])} new lint finding(s)" + (f"; tests {res['tests']['status']}" if res.get("tests") else ""), []
     return "", []
 
 
@@ -58,13 +72,16 @@ def instrument(rt, llm, tools, emit: Emit) -> None:
         if hasattr(tools, n):
             setattr(tools, n, wrap_tool(n, getattr(tools, n)))
 
-    orig_json = llm.json
+    if hasattr(llm, "set_observer"):
+        llm.set_observer(emit)      # every model call (start/end/retry/error, tokens, latency) reports itself
+        return
+    orig_json = llm.json            # a bare test double without the observer hook
 
-    def llm_json(task, system, prompt, hints=None):
+    def llm_json(task, system, prompt, hints=None, **kw):
         t0 = time.time()
         emit({"type": "llm", "task": task, "model": llm.name, "phase": "start", "prompt_chars": len(prompt)})
         try:
-            res = orig_json(task, system, prompt, hints=hints)
+            res = orig_json(task, system, prompt, hints=hints, **kw)
         except Exception as e:
             emit({"type": "llm", "task": task, "model": llm.name, "phase": "error", "error": str(e)[:200]})
             raise
@@ -72,20 +89,3 @@ def instrument(rt, llm, tools, emit: Emit) -> None:
         return res
 
     llm.json = llm_json
-
-    if rt is None:
-        return
-
-    def wrap_node(name: str, orig):
-        def wrapped(state):
-            emit({"type": "node", "node": name, "phase": "start"})
-            before = len(state.get("steps", []))
-            out = orig(state)
-            for s in (out.get("steps") or [])[before:]:
-                emit({"type": "step", **s})
-            emit({"type": "node", "node": name, "phase": "end"})
-            return out
-        return wrapped
-
-    for n in NODES:
-        setattr(rt, n, wrap_node(n, getattr(rt, n)))

@@ -1,8 +1,9 @@
+"""Compatibility layer over the patch engine (app/patchset.py): the older edit / change helpers, now with the engine's safety and
+fidelity (whitespace-tolerant matching, EOL/BOM preservation, syntax checks, atomic writes)."""
 from __future__ import annotations
-import difflib
 from pathlib import Path
 
-from .utils import safe_path
+from .patchset import PatchError, PatchSet, PatchSpec, apply_patchset, build_patchset  # noqa: F401  (re-exported)
 
 
 def validate_edit(root: Path, edit: dict) -> tuple[bool, str]:
@@ -10,75 +11,41 @@ def validate_edit(root: Path, edit: dict) -> tuple[bool, str]:
     if not edit or not edit.get("file") or not edit.get("search"):
         return False, "edit is missing file/search"
     try:
-        p = safe_path(root, edit["file"])
-    except ValueError as e:
+        build_patchset(root, PatchSpec(edits=[edit]), allow_noop=True)
+    except PatchError as e:
         return False, str(e)
-    if not p.is_file():
-        return False, f"file not found: {edit['file']}"
-    n = p.read_text(encoding="utf-8").count(edit["search"])
-    if n != 1:
-        return False, f"`search` text must match exactly once (found {n})"
     return True, ""
 
 
 def apply_edit(root: Path, edit: dict) -> str:
-    ok, err = validate_edit(root, edit)
-    if not ok:
-        raise ValueError(err)
-    p = safe_path(root, edit["file"])
-    new = p.read_text(encoding="utf-8").replace(edit["search"], edit.get("replace", ""), 1)
-    p.write_text(new, encoding="utf-8")
-    return new
+    ps = build_patchset(root, PatchSpec(edits=[edit]), allow_noop=True)
+    apply_patchset(root, ps)
+    return ps.changes[0].new or ""
 
 
 def make_diff(root: Path, edit: dict) -> str:
-    p = safe_path(root, edit["file"])
-    old = p.read_text(encoding="utf-8")
-    new = old.replace(edit["search"], edit.get("replace", ""), 1)
-    return "".join(difflib.unified_diff(old.splitlines(True), new.splitlines(True),
-                                        f"a/{edit['file']}", f"b/{edit['file']}"))
+    return build_patchset(root, PatchSpec(edits=[edit]), allow_noop=True).diff
 
 
-# ---- multi-file changes: several edits + brand-new files, validated together before anything is written ----
-def plan_changes(root: Path, edits: list[dict] | None, new_files: list[dict] | None) -> dict[str, tuple[str, str]]:
-    """Dry run. Returns {path: (old_text, new_text)} or raises ValueError. Edits to one file apply in order."""
-    files: dict[str, list[str]] = {}
-    for e in edits or []:
-        f = e.get("file")
-        if not f or not e.get("search"):
-            raise ValueError("edit is missing file/search")
-        p = safe_path(root, f)
-        if f not in files:
-            if not p.is_file():
-                raise ValueError(f"file not found: {f}")
-            old = p.read_text(encoding="utf-8")
-            files[f] = [old, old]
-        n = files[f][1].count(e["search"])
-        if n != 1:
-            raise ValueError(f"`search` text in {f} must match exactly once (found {n})")
-        files[f][1] = files[f][1].replace(e["search"], e.get("replace", ""), 1)
-    for nf in new_files or []:
-        f = nf.get("path")
-        if not f or not isinstance(nf.get("content"), str):
-            raise ValueError("new file needs a path and content")
-        if f in files or safe_path(root, f).exists():
-            raise ValueError(f"file already exists: {f}")
-        files[f] = ["", nf["content"]]
-    if not files:
-        raise ValueError("no changes proposed")
-    return {k: (v[0], v[1]) for k, v in files.items()}
+def plan_changes(root: Path, edits: list[dict] | None, new_files: list[dict] | None, delete_files: list[str] | None = None) -> dict[str, tuple[str, str]]:
+    """Dry run. Returns {path: (old_text, new_text)} or raises ValueError. Deleted files map to (old_text, "")."""
+    ps = build_patchset(root, PatchSpec(edits=edits or [], new_files=new_files or [], delete_files=delete_files or []), allow_noop=True)
+    return {c.path: (c.old or "", c.new or "") for c in ps.changes}
 
 
-def apply_changes(root: Path, edits: list[dict] | None, new_files: list[dict] | None) -> list[str]:
-    plan = plan_changes(root, edits, new_files)
-    for f, (_, new) in plan.items():
-        p = safe_path(root, f)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(new, encoding="utf-8")
-    return list(plan)
+def apply_changes(root: Path, edits: list[dict] | None, new_files: list[dict] | None, delete_files: list[str] | None = None) -> list[str]:
+    ps = build_patchset(root, PatchSpec(edits=edits or [], new_files=new_files or [], delete_files=delete_files or []), allow_noop=True)
+    apply_patchset(root, ps, verify_base=False)
+    return ps.paths
+
+
+def apply_spec(root: Path, spec: dict) -> list[str]:
+    """Apply any patch spec (edits / unified_diff / rewrites / new_files / delete_files) to a directory. Used on sandbox copies."""
+    ps = build_patchset(root, PatchSpec.from_dict(spec), allow_noop=True)
+    apply_patchset(root, ps, verify_base=False)
+    return ps.paths
 
 
 def changes_diff(plan: dict[str, tuple[str, str]]) -> str:
-    return "".join("".join(difflib.unified_diff(old.splitlines(True), new.splitlines(True),
-                                                f"a/{f}" if old else "/dev/null", f"b/{f}"))
-                   for f, (old, new) in plan.items())
+    from .patchset import unified
+    return "".join(unified(old if old else None, new, f)[0] for f, (old, new) in plan.items())

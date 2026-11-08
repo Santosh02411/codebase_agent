@@ -8,6 +8,13 @@ from pathlib import Path
 from .utils import safe_path
 
 IDENT = ["-c", "user.name=Codebase Agent", "-c", "user.email=agent@localhost", "-c", "core.quotepath=off"]
+# A repository's own .git/config and .gitattributes are untrusted input (zip uploads, cloned repos): they can name programs git will run
+# (fsmonitor, hooks, filters, textconv, ssh command, credential helpers) or rewrite URLs. These flags + sanitize_config() take that away.
+HARDEN = ["-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-c", "core.pager=cat", "-c", "core.editor=true", "-c", "core.sshCommand=false",
+          "-c", "protocol.ext.allow=never", "-c", "credential.helper=", "-c", "commit.gpgsign=false", "-c", "gc.auto=0"]
+HARD_ENV = {"GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull, "GIT_ASKPASS": "false", "GIT_ATTR_NOSYSTEM": "1"}
+SAFE_KEYS = {"core.repositoryformatversion", "core.filemode", "core.bare", "core.logallrefupdates", "core.ignorecase", "core.symlinks"}
+_SAFE_PATTERNS = [__import__("re").compile(p) for p in (r"remote\.[^.\s]+\.url", r"remote\.[^.\s]+\.fetch", r"branch\.[^.\s]+\.(remote|merge)")]
 EXCLUDES = ["node_modules/", "venv/", ".venv/", "__pycache__/", "dist/", "build/", ".next/", ".pytest_cache/", "*.pyc"]
 
 
@@ -24,8 +31,9 @@ def net_env(auth_header: str | None) -> dict[str, str]:
 
 def _git(root: Path, *args: str, timeout: int = 60, check: bool = True, extra_env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
     try:
-        env = {**os.environ, "GIT_PAGER": "cat", "GIT_TERMINAL_PROMPT": "0", **(extra_env or {})}
-        r = subprocess.run(["git", *IDENT, "-C", str(root), *args], capture_output=True, text=True, timeout=timeout, env=env)
+        env = {k: v for k, v in os.environ.items() if k != "GIT_EXTERNAL_DIFF"}
+        env.update({"GIT_PAGER": "cat", "GIT_TERMINAL_PROMPT": "0", **HARD_ENV, **(extra_env or {})})
+        r = subprocess.run(["git", *IDENT, *HARDEN, "-C", str(root), *args], capture_output=True, text=True, timeout=timeout, env=env)
     except FileNotFoundError:
         raise GitError("git is not installed on the server")
     except subprocess.TimeoutExpired:
@@ -43,10 +51,47 @@ def available() -> bool:
         return False
 
 
+def sanitize_config(root: Path) -> None:
+    """Rewrite an imported repository's .git/config keeping only inert settings (remote urls over https/ssh, branch tracking). Run once per project.
+    Drops everything that can execute programs or redirect traffic: filters, hooks path, fsmonitor, aliases, credential helpers, url rewrites, includes."""
+    git_dir = root / ".git"
+    if git_dir.is_file():                       # a `gitdir: /somewhere/else` pointer: never follow it
+        git_dir.unlink()
+        return
+    cfg, marker = git_dir / "config", git_dir / "agent-sanitized"
+    if not cfg.is_file() or marker.exists():
+        return
+    try:
+        r = subprocess.run(["git", "config", "--file", str(cfg), "--no-includes", "--list", "-z"], capture_output=True, text=True, timeout=20,
+                           env={**os.environ, **HARD_ENV})
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return
+    keep = []
+    for item in r.stdout.split("\0"):
+        key, _, val = item.partition("\n")
+        if not key:
+            continue
+        ok = key in SAFE_KEYS or any(p.fullmatch(key) for p in _SAFE_PATTERNS)
+        if ok and key.endswith(".url") and not (val.startswith("https://") or __import__("re").match(r"^[\w.-]+@[\w.-]+:[\w./-]+$", val)):
+            ok = False
+        if ok:
+            keep.append((key, val))
+    tmp = git_dir / "config.sanitized"
+    tmp.write_text("")
+    for key, val in keep:
+        subprocess.run(["git", "config", "--file", str(tmp), "--add", key, val], capture_output=True, timeout=20, env={**os.environ, **HARD_ENV})
+    tmp.replace(cfg)
+    for hook in (git_dir / "hooks").glob("*") if (git_dir / "hooks").is_dir() else []:
+        if hook.is_file() and not hook.name.endswith(".sample"):
+            hook.unlink()
+    marker.write_text("1")
+
+
 def ensure_repo(root: Path) -> bool:
     """Make sure `root` is its own git repository with a baseline commit. Returns False if git is unavailable."""
     if not available():
         return False
+    sanitize_config(root)
     if (root / ".git").exists():
         return True
     _git(root, "init", "-q")
@@ -100,16 +145,42 @@ def discard(root: Path, path: str) -> None:
         p.unlink()
 
 
-def commit(root: Path, message: str) -> dict:
+def create_branch(root: Path, name: str, from_ref: str | None = None, checkout: bool = True) -> dict:
+    """A new LOCAL branch (nothing leaves this machine). Fails if the name is taken or invalid."""
+    ensure_repo(root)
+    if not name or name.startswith("-") or _git(root, "check-ref-format", "--branch", name, check=False).returncode != 0:
+        raise GitError(f"'{name}' is not a valid branch name")
+    if _git(root, "rev-parse", "--verify", "--quiet", f"refs/heads/{name}", check=False).returncode == 0:
+        raise GitError(f"a branch named '{name}' already exists")
+    start = _check_ref(from_ref) if from_ref else "HEAD"
+    r = _git(root, "branch", name, start, check=False)
+    if r.returncode != 0:
+        raise GitError((r.stderr or "could not create the branch").strip()[:200])
+    if checkout:
+        c = _git(root, "checkout", "-q", name, check=False)
+        if c.returncode != 0:
+            raise GitError((c.stderr or "could not switch to the new branch").strip()[:200])
+    return {"branch": name, "from": start, "checked_out": checkout, "commit": _git(root, "rev-parse", "--short", name).stdout.strip()}
+
+
+def commit(root: Path, message: str, paths: list[str] | None = None) -> dict:
+    """Commit `paths` (default: every changed file). Files that look like secrets (.env, keys) are never staged; they are reported in `skipped`."""
     if not message.strip():
         raise GitError("commit message is required")
     ensure_repo(root)
-    _git(root, "add", "-A")
-    r = _git(root, "commit", "-q", "-m", message.strip(), check=False)
+    from .agent.extras import is_secret_file
+    changed = [f["path"] for f in status(root)["files"]]
+    wanted = [p for p in (paths or changed) if p in changed]
+    skipped = [p for p in wanted if is_secret_file(p)]
+    stage = [p for p in wanted if p not in skipped]
+    if not stage:
+        raise GitError("nothing to commit" + (f" (skipped secret-looking files: {', '.join(skipped)})" if skipped else ""))
+    _git(root, "add", "-A", "--", *stage)
+    r = _git(root, "commit", "-q", "-m", message.strip(), "--", *stage, check=False)
     if r.returncode != 0:
         raise GitError((r.stdout + r.stderr).strip()[:300] or "nothing to commit")
     sha = _git(root, "rev-parse", "--short", "HEAD").stdout.strip()
-    return {"sha": sha}
+    return {"sha": sha, "files": stage, "skipped": skipped}
 
 
 # ---- branches, commits, checkout ---------------------------------------------------------------------
