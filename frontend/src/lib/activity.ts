@@ -1,16 +1,22 @@
 import type { AgentEvent, Run } from "./types";
 
 const NODE: Record<string, string> = {
-  analyze_query: "Understanding the question", retrieve: "Searching the codebase", analyze: "Reasoning about the code",
-  generate_fix: "Writing a patch", verify: "Running tests to verify", respond: "Writing the answer",
+  understand: "Planner: understanding the task", plan: "Planner: choosing specialists", research: "Researcher: gathering code",
+  analyze: "Debugger: reasoning about the code", code: "Coder: writing the change", test: "Tester: running the tests",
+  reflect: "Debugger: working out what went wrong", review: "Reviewer: checking the work", document: "Documenter: writing it up",
+  respond: "Writing the answer",
 };
 const TOOL: Record<string, string> = {
   search_code: "Search code", read_file: "Read file", related: "Follow call graph", find_symbol: "Look up symbol",
   run_tests: "Run tests", get_dependencies: "Read dependencies", list_tree: "List files",
+  grep: "Exact text search", callers: "Find callers", callees: "Find callees", impact: "Impact analysis", list_files: "List files",
+  git_status: "Git status", git_branches: "Git branches", git_show: "Show commit", git_blame: "Git blame", git_file_at: "Previous version", git_changed_files: "Changed files", git_authors: "Authors", git_history: "Git history", git_log: "Git history", git_diff: "Git diff", search_docs: "Search documentation", find_config: "Inspect configuration",
+  inspect_project: "Inspect project", search_web: "Search the web", lint: "Run linter", check_patch: "Check patch in sandbox",
 };
 const TASK: Record<string, string> = {
-  analyze_query: "plan searches", analyze: "analyse retrieved code", generate_fix: "write patch", generate_change: "write change",
-  generate_tests: "write tests", architecture: "explain architecture", review: "review code",
+  understand: "understand the task", plan: "plan the work", research: "pick tools", analyze: "analyse retrieved code",
+  generate_fix: "write patch", generate_change: "write change", generate_tests: "write tests", reflect: "diagnose the failure",
+  review_patch: "review the patch", review: "review code", document: "write documentation",
 };
 
 export const nodeLabel = (n: string) => NODE[n] ?? n;
@@ -59,8 +65,8 @@ export function toRows(run: Run): Row[] {
       }
       case "llm": {
         const k = `l:${e.task}`;
-        if (e.phase === "start") { open.set(k, rows.length); rows.push({ key: `l${e.seq}`, kind: "llm", title: `Model (${e.model}): ${taskLabel(e.task)}`, detail: e.prompt_chars ? `${Math.round(e.prompt_chars / 4).toLocaleString()} tokens of context (approx.)` : undefined, state: "running", t: t(e), depth }); }
-        else { const i = open.get(k); if (i != null) rows[i] = { ...rows[i], state: e.phase === "error" ? "error" : "done", ms: e.ms, detail: e.error ?? rows[i].detail }; }
+        if (e.phase === "start") { open.set(k, rows.length); rows.push({ key: `l${e.seq}`, kind: "llm", title: `Model (${e.model}): ${taskLabel(e.task)}`, detail: e.prompt_chars ? `${Math.round(e.prompt_chars / 3.5).toLocaleString()} tokens of context (approx.)` : undefined, state: "running", t: t(e), depth }); }
+        else { const i = open.get(k); if (i != null) rows[i] = { ...rows[i], state: e.phase === "error" ? "error" : "done", ms: e.ms, detail: e.error ?? (e.input_tokens != null ? `${e.input_tokens.toLocaleString()} in / ${(e.output_tokens ?? 0).toLocaleString()} out tokens${e.tool_calls ? `, ${e.tool_calls} tool call(s)` : ""}` : rows[i].detail) }; }
         break;
       }
       case "step": rows.push({ key: `s${e.seq}`, kind: "step", title: e.message, detail: e.node, state: "done", t: t(e), depth }); break;
