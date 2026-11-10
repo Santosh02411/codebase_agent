@@ -1,0 +1,71 @@
+# A small offline rule pack (no registry access needed inside the network-less sandbox). Add your own rules here.
+rules:
+  - id: python-eval-exec
+    languages: [python]
+    severity: ERROR
+    message: eval()/exec() on dynamic input can execute attacker-controlled code.
+    pattern-either: [{pattern: eval(...)}, {pattern: exec(...)}]
+    metadata: {cwe: "CWE-95", category: security}
+  - id: python-subprocess-shell-true
+    languages: [python]
+    severity: ERROR
+    message: subprocess call with shell=True is vulnerable to command injection if any part of the command is user-controlled.
+    pattern: subprocess.$F(..., shell=True, ...)
+    metadata: {cwe: "CWE-78", category: security}
+  - id: python-os-system
+    languages: [python]
+    severity: WARNING
+    message: os.system() runs a shell; prefer subprocess with an argument list.
+    pattern: os.system(...)
+    metadata: {cwe: "CWE-78", category: security}
+  - id: python-pickle-loads
+    languages: [python]
+    severity: ERROR
+    message: pickle on untrusted data allows arbitrary code execution.
+    pattern-either: [{pattern: pickle.loads(...)}, {pattern: pickle.load(...)}]
+    metadata: {cwe: "CWE-502", category: security}
+  - id: python-yaml-load
+    languages: [python]
+    severity: ERROR
+    message: yaml.load without SafeLoader can construct arbitrary objects; use yaml.safe_load.
+    pattern: yaml.load($X)
+    metadata: {cwe: "CWE-502", category: security}
+  - id: python-requests-verify-false
+    languages: [python]
+    severity: WARNING
+    message: TLS certificate verification is disabled.
+    pattern: requests.$F(..., verify=False, ...)
+    metadata: {cwe: "CWE-295", category: security}
+  - id: python-weak-hash
+    languages: [python]
+    severity: WARNING
+    message: MD5/SHA-1 are broken for security purposes.
+    pattern-either: [{pattern: hashlib.md5(...)}, {pattern: hashlib.sha1(...)}]
+    metadata: {cwe: "CWE-327", category: security}
+  - id: python-sql-string-format
+    languages: [python]
+    severity: ERROR
+    message: SQL built with string formatting is injectable; use parameterised queries.
+    pattern-either:
+      - pattern: $C.execute(f"...{$X}...")
+      - pattern: $C.execute("..." % $X)
+      - pattern: $C.execute("...".format(...))
+    metadata: {cwe: "CWE-89", category: security}
+  - id: js-eval
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: eval() executes arbitrary code.
+    pattern: eval(...)
+    metadata: {cwe: "CWE-95", category: security}
+  - id: js-child-process-exec
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: child_process.exec runs a shell; use execFile with an argument array.
+    pattern: $CP.exec(...)
+    metadata: {cwe: "CWE-78", category: security}
+  - id: js-innerhtml
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: Assigning to innerHTML with dynamic content enables XSS.
+    pattern: $EL.innerHTML = $X
+    metadata: {cwe: "CWE-79", category: security}
