@@ -1,5 +1,5 @@
 "use client";
-import { AlertCircle, FileDiff, Loader2, OctagonX, Paperclip } from "lucide-react";
+import { AlertCircle, FileDiff, ImageIcon, Loader2, OctagonX, Paperclip } from "lucide-react";
 import { counts } from "@/lib/edits";
 import { currentActivity } from "@/lib/activity";
 import { cn, parseLines } from "@/lib/utils";
@@ -9,6 +9,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Markdown } from "./Markdown";
 import { TestPill } from "./DiffViews";
+import { VerdictBadge } from "./PatchReview";
+import { api } from "@/lib/api";
+import { toast } from "sonner";
 
 export function SourceChips({ sources, max = 8 }: { sources: Source[]; max?: number }) {
   const openFile = useIde((s) => s.openFile);
@@ -67,6 +70,44 @@ function ProposalCard({ id }: { id: string }) {
   );
 }
 
+function PRCard({ m }: { m: ChatMessage }) {
+  const r = m.result?.pr_report;
+  const repoId = useIde((s) => s.repoId);
+  if (!r || !repoId) return null;
+  const EVENT = { approve: "APPROVE", request_changes: "REQUEST_CHANGES", comment: "COMMENT" } as const;
+  const propose = async () => {
+    try {
+      await api.proposeReview(repoId, r.number, r.summary, EVENT[r.verdict ?? "comment"], (r.comments ?? []).map((c) => ({ path: c.path, line: c.line, body: c.body, severity: c.severity })));
+      useIde.getState().setSidebar("github");
+      toast.message("Review the exact content under GitHub → Approvals. Nothing is posted until you approve.");
+    } catch (e) { toast.error((e as Error).message); }
+  };
+  if (r.kind !== "review") return <div className="mt-2 rounded-lg border bg-background p-2.5 text-[12px]"><div className="flex items-center gap-2 font-medium">Pull request #{r.number}<Badge variant={r.risk === "high" ? "destructive" : r.risk === "medium" ? "warning" : "success"}>{r.risk} risk</Badge><span className="text-muted-foreground">{r.change_type}</span></div><div className="mt-1 text-muted-foreground">{r.static_note}</div></div>;
+  return (
+    <div className="mt-2 rounded-lg border bg-background p-2.5">
+      <div className="flex items-center gap-2 font-medium">Review draft for PR #{r.number}<Badge variant={r.verdict === "request_changes" ? "destructive" : r.verdict === "approve" ? "success" : "secondary"}>{(r.verdict ?? "comment").replace("_", " ")}</Badge><span className="text-muted-foreground">{r.comments?.length ?? 0} inline comment(s)</span></div>
+      <div className="mt-1 text-[11px] text-muted-foreground">This is a draft: nothing has been sent to GitHub.</div>
+      <Button size="sm" className="mt-2" onClick={() => void propose()}>Prepare to post (needs your approval)</Button>
+    </div>
+  );
+}
+
+function PatchCard({ id, m }: { id: string; m: ChatMessage }) {
+  const openPatch = useIde((s) => s.openPatch);
+  const r = m.result;
+  const files = r?.patch_files ?? [];
+  const add = files.reduce((n, f) => n + f.additions, 0), del = files.reduce((n, f) => n + f.deletions, 0);
+  return (
+    <div className="mt-2 rounded-lg border bg-background p-2.5">
+      <div className="flex items-center gap-2 font-medium"><FileDiff className="size-4 text-primary" />{files.length} file{files.length === 1 ? "" : "s"} · <span className="text-emerald-400">+{add}</span> <span className="text-red-400">−{del}</span><span className="ml-auto"><VerdictBadge v={r?.verification} /></span></div>
+      <div className="mt-1 truncate font-mono text-[11px] text-muted-foreground">{files.map((f) => `${f.op === "create" ? "+ " : f.op === "delete" ? "− " : ""}${f.path}`).join(", ")}</div>
+      {(r?.test_before || r?.test_after) && <div className="mt-1.5 flex flex-wrap gap-3 text-[11px]"><TestPill t={r?.test_before} label="Tests before" /><TestPill t={r?.test_after} label="after" /></div>}
+      {r?.lint && <div className="mt-1 text-[11px] text-muted-foreground">Linter ({r.lint.tool}): {r.lint.new.length === 0 ? "no new findings" : `${r.lint.new.length} new finding(s)`}</div>}
+      <Button size="sm" className="mt-2" onClick={() => openPatch(id, m.text || files[0]?.path || "changes")}>Review the exact diff &amp; approve</Button>
+    </div>
+  );
+}
+
 const STATUS_BADGE: Record<string, { v: "success" | "destructive" | "warning" | "secondary"; t: string }> = {
   fix_verified: { v: "success", t: "fix verified by tests" }, verified: { v: "success", t: "verified by tests" },
   fix_failed: { v: "destructive", t: "tests fail after fix" }, failed: { v: "destructive", t: "tests fail after change" },
@@ -87,6 +128,10 @@ export function MessageView({ m }: { m: ChatMessage }) {
             <Paperclip className="size-3 shrink-0" /><span className="truncate">{m.attachment.file}:{m.attachment.startLine}-{m.attachment.endLine}</span>
           </button>
         )}
+        {m.shots && m.shots.length > 0 && <div className="mb-1.5 flex gap-1.5">{m.shots.map((sc, i) => (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img key={i} src={`data:${sc.media_type};base64,${sc.data}`} alt={sc.name ?? "screenshot"} className="h-16 max-w-28 rounded border object-cover" />
+        ))}</div>}
         <div className="whitespace-pre-wrap break-words">{m.text}</div>
       </div>
     );
@@ -108,7 +153,7 @@ export function MessageView({ m }: { m: ChatMessage }) {
   if (!r) return null;
   const body = r.answer ?? (m.mode === "review" ? r.summary : r.explanation) ?? "";
   const status = r.status ? STATUS_BADGE[r.status] : undefined;
-  const hasProposal = !!m.proposalId;
+  const hasProposal = !!m.proposalId || !!m.patchId;
   const showMockHint = r.llm === "mock" && (r.status === "no_fix" || r.status === "no_change");
   return (
     <div className="rounded-lg border bg-panel px-3 py-2.5">
@@ -121,6 +166,8 @@ export function MessageView({ m }: { m: ChatMessage }) {
       {!body && !hasProposal && !m.findings && <div className="text-muted-foreground">The agent produced no text for this request.</div>}
       {showMockHint && <div className="mt-2 rounded border border-warning/40 bg-warning/10 px-2 py-1.5 text-[12px]">The offline mock model only searches code. Set <code>LLM_PROVIDER</code> and an API key in <code>.env</code> to generate changes.</div>}
       {m.findings && <Findings items={m.findings} />}
+      {m.result?.pr_report && <PRCard m={m} />}
+      {m.patchId && <PatchCard id={m.patchId} m={m} />}
       {m.proposalId && <ProposalCard id={m.proposalId} />}
       {r.citations && r.citations.invalid.length > 0 && <div className="mt-2 rounded border border-warning/40 bg-warning/10 px-2 py-1.5 text-[12px]">⚠ The answer cites {r.citations.invalid.map((n) => `[${n}]`).join(", ")}, which {r.citations.invalid.length === 1 ? "was" : "were"} not among the snippets provided. Treat that part with suspicion.</div>}
       {m.sources && m.sources.length > 0 && (<><div className="mt-2.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Sources{r.citations ? ` · ${r.citations.cited.length} cited of ${m.sources.length} retrieved` : ""}</div><SourceChips sources={m.sources} /></>)}

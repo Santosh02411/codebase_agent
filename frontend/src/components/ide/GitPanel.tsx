@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { GitBranch, GitCommitHorizontal, RefreshCw, Undo2 } from "lucide-react";
+import { GitBranch, GitCommitHorizontal, RefreshCw, Sparkles, Undo2, Upload } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useGitStatus, useInvalidateRepo } from "@/hooks/queries";
@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { FileIcon } from "./Explorer";
+import { ApprovalCard, usePendingActions } from "./Approvals";
 
 const COLOR = { modified: "text-amber-400", added: "text-emerald-400", untracked: "text-emerald-400", deleted: "text-red-400" } as const;
 const LETTER = { modified: "M", added: "A", untracked: "U", deleted: "D" } as const;
@@ -22,6 +23,24 @@ export function GitPanel({ repoId }: { repoId: string }) {
   const openDiff = useIde((s) => s.openDiff);
   const closeTab = useIde((s) => s.closeTab);
   const [msg, setMsg] = useState("");
+  const [branchName, setBranchName] = useState("");
+  const provider = useIde((s) => s.provider);
+  const actions = usePendingActions(repoId);
+  const draft = useMutation({
+    mutationFn: () => api.commitMessage(repoId, provider),
+    onSuccess: (r) => { setMsg(r.message); if (r.secret_files.length) toast.warning(`Not committed (look like secrets): ${r.secret_files.join(", ")}`); },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  const newBranch = useMutation({
+    mutationFn: () => api.gitBranch(repoId, branchName.trim()),
+    onSuccess: (r) => { setBranchName(""); qc.invalidateQueries({ queryKey: ["git"] }); inv(repoId); toast.success(`Created and switched to ${r.branch}`); },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  const push = useMutation({
+    mutationFn: () => api.proposePush(repoId),
+    onSuccess: () => { actions.refetch(); toast.message("Review the push below. Nothing is sent until you approve it."); },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   const discard = useMutation({
     mutationFn: (path: string) => api.gitDiscard(repoId, path),
@@ -47,7 +66,9 @@ export function GitPanel({ repoId }: { repoId: string }) {
         <>
           <div className="flex items-center gap-1.5 px-3 pb-2 text-muted-foreground"><GitBranch className="size-3.5" />{git.data.branch}<span className="ml-auto">{files.length} changed</span></div>
           <div className="space-y-2 px-2 pb-2">
+            <div className="flex gap-1.5"><Input placeholder="New branch name" value={branchName} onChange={(e) => setBranchName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && branchName.trim()) newBranch.mutate(); }} /><Button size="sm" variant="outline" disabled={!branchName.trim() || newBranch.isPending} onClick={() => newBranch.mutate()}>Create</Button></div>
             <Input placeholder="Commit message (project copy)" value={msg} onChange={(e) => setMsg(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && msg.trim() && files.length) commit.mutate(); }} />
+            <Button size="sm" variant="outline" className="w-full" disabled={!files.length || draft.isPending} onClick={() => draft.mutate()}><Sparkles /> {draft.isPending ? "Drafting…" : "Draft message with AI"}</Button>
             <Button size="sm" className="w-full" disabled={!msg.trim() || !files.length || commit.isPending} onClick={() => commit.mutate()}><GitCommitHorizontal /> Commit {files.length ? `${files.length} file${files.length > 1 ? "s" : ""}` : ""}</Button>
           </div>
           <ScrollArea className="min-h-0 flex-1">
@@ -62,7 +83,11 @@ export function GitPanel({ repoId }: { repoId: string }) {
               </div>
             ))}
           </ScrollArea>
-          <div className="border-t px-3 py-2 text-[11px] text-muted-foreground">Commits stay in the server’s project copy. Use “Open pull request” on a reviewed change to send it to GitHub.</div>
+          <div className="space-y-2 border-t px-2 py-2">
+            <Button size="sm" variant="outline" className="w-full" disabled={push.isPending} onClick={() => push.mutate()} title="Shows exactly what would be pushed. Nothing is sent until you approve."><Upload /> Push branch… (needs approval)</Button>
+            {(actions.data ?? []).filter((a) => a.status === "pending").map((a) => <ApprovalCard key={a.id} a={a} repoId={repoId} />)}
+            <div className="text-[11px] text-muted-foreground">Commits stay in the server’s project copy until you approve a push. Pull requests and reviews are in the GitHub panel.</div>
+          </div>
         </>
       )}
     </div>

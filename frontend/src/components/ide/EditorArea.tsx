@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { FileIcon } from "./Explorer";
 import { GitDiffTab, ReviewTab } from "./DiffViews";
+import { PatchReviewTab } from "./PatchReview";
+import { QualityTab } from "./QualityTab";
 import { MonacoEditor } from "./MonacoEditor";
 import { GraphTab } from "./GraphTab";
 import { ExperimentTab } from "./ExperimentTab";
@@ -25,7 +27,7 @@ function TabButton({ tab, active }: { tab: Tab; active: boolean }) {
       title={tab.path ?? tab.title}
     >
       {tab.kind === "file" && tab.path && <FileIcon name={tab.path} />}
-      {tab.kind === "review" && <FileDiff className="size-3.5 text-primary" />}
+      {(tab.kind === "review" || tab.kind === "patch" || tab.kind === "quality") && <FileDiff className="size-3.5 text-primary" />}
       {tab.kind === "diff" && <GitCompare className="size-3.5 text-amber-400" />}
       {tab.kind === "graph" && <Network className="size-3.5 text-emerald-400" />}
       {tab.kind === "experiment" && <FlaskConical className="size-3.5 text-primary" />}
@@ -113,6 +115,8 @@ export function EditorArea({ repoId }: { repoId: string }) {
         {!active && <Welcome />}
         {active?.kind === "file" && active.path && <><MonacoEditor repoId={repoId} path={active.path} /><SelectionBar /></>}
         {active?.kind === "review" && active.proposalId && <ReviewTab key={active.proposalId} repoId={repoId} proposalId={active.proposalId} />}
+        {active?.kind === "quality" && <QualityTab key="q" repoId={repoId} />}
+        {active?.kind === "patch" && active.patchId && <PatchReviewTab key={active.patchId} repoId={repoId} patchId={active.patchId} />}
         {active?.kind === "diff" && active.path && <GitDiffTab key={active.path} repoId={repoId} path={active.path} />}
         {active?.kind === "experiment" && active.experimentId && <ExperimentTab key={active.id} experimentId={active.experimentId} />}
         {active?.kind === "graph" && active.graph && <GraphTab key={active.id} repoId={repoId} graph={active.graph} />}

@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { Bot, Bug, FileSearch, FlaskConical, Hammer, Layers, MessageCircle, Paperclip, Send, Square, X } from "lucide-react";
+import { Bot, Bug, FileSearch, FlaskConical, Hammer, ImagePlus, Layers, MessageCircle, Paperclip, Send, Square, X } from "lucide-react";
+import { toast } from "sonner";
 import { useHealth } from "@/hooks/queries";
 import { useAgentRun } from "@/hooks/useAgentRun";
 import { useIde } from "@/store/ide";
@@ -20,6 +21,21 @@ const MODES: { id: UiMode; label: string; icon: React.ReactNode; hint: string; p
   { id: "review", label: "Review", icon: <FileSearch />, hint: "Review the open file or the whole project", placeholder: "Optional: what should the review focus on?", needsText: false },
   { id: "architecture", label: "Arch", icon: <Layers />, hint: "Explain how the project is structured", placeholder: "", needsText: false },
 ];
+const ACCEPTED = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+const MAX_BYTES = 5_000_000;
+
+/** Reads an image file into the base64 form the API takes. */
+function readImage(file: File): Promise<{ media_type: string; data: string; name: string } | null> {
+  if (!ACCEPTED.includes(file.type)) { toast.error("Screenshots must be PNG, JPEG, WebP or GIF"); return Promise.resolve(null); }
+  if (file.size > MAX_BYTES) { toast.error("A screenshot may be at most 5 MB"); return Promise.resolve(null); }
+  return new Promise((resolve) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve({ media_type: file.type, data: String(fr.result).split(",")[1] ?? "", name: file.name || "screenshot" });
+    fr.onerror = () => resolve(null);
+    fr.readAsDataURL(file);
+  });
+}
+
 const IDEAS: Record<UiMode, string[]> = {
   chat: ["Where is authentication handled?", "How does a request flow through this app?", "Which functions have no tests?"],
   debug: ["500 error when creating a delivery", "Why does this raise a TypeError when a field is missing?"],
@@ -31,7 +47,15 @@ export function ChatPanel() {
   const { run, stop } = useAgentRun();
   const messages = useIde((s) => s.messages);
   const mode = useIde((s) => s.mode) as UiMode;
-  const { setMode, provider, setProvider, verify, setVerify, attachment, setAttachment } = useIde();
+  const { setMode, provider, setProvider, verify, setVerify, attachment, setAttachment, screenshots, addScreenshot, removeScreenshot } = useIde();
+  const fileInput = useRef<HTMLInputElement>(null);
+  const addFiles = async (files: File[]) => {
+    for (const f of files) {
+      if (useIde.getState().screenshots.length >= 3) { toast.message("At most 3 screenshots per request"); break; }
+      const img = await readImage(f);
+      if (img) addScreenshot(img);
+    }
+  };
   const running = useIde((s) => s.runs.some((r) => r.state === "running"));
   const activePath = useIde((s) => { const t = s.tabs.find((x) => x.id === s.activeTabId); return t?.kind === "file" ? t.path : undefined; });
   const health = useHealth();
@@ -44,14 +68,14 @@ export function ChatPanel() {
   useEffect(() => { const f = () => area.current?.focus(); window.addEventListener("agent:focus-chat", f); return () => window.removeEventListener("agent:focus-chat", f); }, []);
   useEffect(() => { bottom.current?.scrollIntoView({ block: "end" }); }, [messages, running]);
 
-  const canSend = !running && (cfg.needsText ? text.trim().length > 0 : true) && !(mode === "tests" && !activePath && !attachment);
+  const canSend = !running && (cfg.needsText ? text.trim().length > 0 || screenshots.length > 0 : true) && !(mode === "tests" && !activePath && !attachment);
   const submit = () => {
     if (!canSend) return;
     const t = text.trim();
     const target = mode === "tests" ? (attachment?.file ?? activePath) : mode === "review" && fileOnly ? (attachment?.file ?? activePath) : undefined;
     const apiMode: Mode = mode === "debug" && !verify ? "fix" : mode;
     setText("");
-    void run(apiMode, t || (mode === "tests" ? `Write tests for ${target}` : mode === "review" ? (target ? `Review ${target}` : "Review the whole project") : "Explain the architecture"), { target });
+    void run(apiMode, t || (screenshots.length ? "" : mode === "tests" ? `Write tests for ${target}` : mode === "review" ? (target ? `Review ${target}` : "Review the whole project") : "Explain the architecture"), { target });
   };
 
   return (
@@ -95,8 +119,21 @@ export function ChatPanel() {
             {mode === "review" && <label className="flex items-center gap-1.5"><input type="checkbox" checked={fileOnly} onChange={(e) => setFileOnly(e.target.checked)} /> Current file only{fileOnly && activePath ? <span className="font-mono text-foreground">({activePath})</span> : null}</label>}
           </div>
         )}
+        {screenshots.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {screenshots.map((sc, i) => (
+              <div key={i} className="group relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={`data:${sc.media_type};base64,${sc.data}`} alt={sc.name ?? "screenshot"} className="h-14 max-w-24 rounded border object-cover" />
+                <button className="absolute -right-1 -top-1 rounded-full border bg-background p-0.5 opacity-80 hover:opacity-100" onClick={() => removeScreenshot(i)} aria-label="Remove screenshot"><X className="size-3" /></button>
+              </div>
+            ))}
+            <span className="self-center text-[11px] text-muted-foreground">A vision model reads the error text from {screenshots.length === 1 ? "this screenshot" : "these screenshots"}.</span>
+          </div>
+        )}
         {cfg.placeholder !== "" && (
-          <Textarea ref={area} rows={3} value={text} placeholder={cfg.placeholder} disabled={running} onChange={(e) => setText(e.target.value)}
+          <Textarea ref={area} rows={3} value={text} placeholder={cfg.placeholder + (mode === "debug" ? " You can paste a screenshot (Ctrl+V)." : "")} disabled={running} onChange={(e) => setText(e.target.value)}
+            onPaste={(e) => { const imgs = Array.from(e.clipboardData.files).filter((f) => f.type.startsWith("image/")); if (imgs.length) { e.preventDefault(); void addFiles(imgs); } }}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); } }} />
         )}
         <div className="flex items-center gap-2">
@@ -105,6 +142,8 @@ export function ChatPanel() {
               <input type="checkbox" checked={verify} onChange={(e) => setVerify(e.target.checked)} /> Verify with tests
             </label>
           )}
+          <input ref={fileInput} type="file" accept={ACCEPTED.join(",")} multiple hidden onChange={(e) => { void addFiles(Array.from(e.target.files ?? [])); e.target.value = ""; }} />
+          {cfg.placeholder !== "" && <Button size="sm" variant="ghost" title="Attach a screenshot of an error (or paste one)" disabled={running} onClick={() => fileInput.current?.click()}><ImagePlus /></Button>}
           <div className="ml-auto flex gap-1.5">
             {running
               ? <Button size="sm" variant="destructive" onClick={stop}><Square /> Stop</Button>

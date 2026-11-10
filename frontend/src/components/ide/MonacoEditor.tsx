@@ -5,12 +5,14 @@ import type { editor as MonacoNS } from "monaco-editor";
 import { toast } from "sonner";
 import { useFile, useSaveFile } from "@/hooks/queries";
 import { useIde } from "@/store/ide";
+import { useMonacoTheme } from "@/lib/monacoTheme";
 import { languageOf } from "@/lib/languages";
 import { api } from "@/lib/api";
 
 type Ed = MonacoNS.IStandaloneCodeEditor;
 
 export function MonacoEditor({ repoId, path }: { repoId: string; path: string }) {
+  const monacoTheme = useMonacoTheme();
   const file = useFile(repoId, path);
   const save = useSaveFile(repoId);
   const buffer = useIde((s) => s.buffers[path]);
@@ -108,6 +110,7 @@ export function MonacoEditor({ repoId, path }: { repoId: string; path: string })
         if (s) st().setAttachment(s);
         st().setChatOpen(true);
         window.dispatchEvent(new Event("agent:focus-chat"));
+        window.dispatchEvent(new Event("agent:ask-selection"));
       },
     });
     ed.addAction({
@@ -134,7 +137,7 @@ export function MonacoEditor({ repoId, path }: { repoId: string; path: string })
       path={`repo:${repoId}/${path}`}
       language={language}
       defaultValue={buffer ?? serverText ?? ""}
-      theme="vs-dark"
+      theme={monacoTheme}
       onMount={onMount}
       options={{
         fontSize: 13, fontFamily: "JetBrains Mono, ui-monospace, Menlo, Consolas, monospace", minimap: { enabled: true, scale: 1 },

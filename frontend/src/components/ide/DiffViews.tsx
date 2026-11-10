@@ -12,6 +12,7 @@ import type { Decision, Edit, Proposal, TestRun } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useApplyChanges, useFile, useGitVersions, useHealth, useRepos } from "@/hooks/queries";
 import { useIde } from "@/store/ide";
+import { useMonacoTheme } from "@/lib/monacoTheme";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -49,6 +50,7 @@ function DecisionButtons({ value, onChange }: { value: Decision; onChange: (d: D
 
 /** Approve / reject each change of an AI proposal and see the exact result in a diff editor before anything is applied. */
 export function ReviewTab({ repoId, proposalId }: { repoId: string; proposalId: string }) {
+  const monacoTheme = useMonacoTheme();
   const p = useIde((s) => s.proposals[proposalId]);
   const { setDecision, setAllDecisions, patchProposal, closeTab, setBottom, setSidebar } = useIde.getState();
   const files = useMemo(() => (p ? filesOf(p) : []), [p]);
@@ -86,7 +88,7 @@ export function ReviewTab({ repoId, proposalId }: { repoId: string; proposalId: 
         out[f] = p.applied ? base.text : applyEdits(base.text, mine.map((x) => x.e)).text;
       }
       if (!Object.keys(out).length) throw new Error("Approve at least one change first");
-      return api.createPr(repoId, out, p.title.slice(0, 70) || "AI change", `${p.explanation}\n\n_Generated with Codebase Agent._`);
+      return api.createPr(repoId, out, p.title.slice(0, 70) || "AI change", `${p.explanation}\n\n_Generated with CodeScout AI._`);
     },
     onSuccess: (r) => { toast.success(`Pull request #${r.number} opened`, { action: { label: "Open", onClick: () => window.open(r.url, "_blank") } }); },
     onError: (e: Error) => toast.error(e.message),
@@ -181,7 +183,7 @@ export function ReviewTab({ repoId, proposalId }: { repoId: string; proposalId: 
             <DiffEditor
               key={current}
               height="100%"
-              theme="vs-dark"
+              theme={monacoTheme}
               language={languageOf(current)}
               original={isNew ? "" : original.data?.text ?? ""}
               modified={preview.text}
@@ -197,6 +199,7 @@ export function ReviewTab({ repoId, proposalId }: { repoId: string; proposalId: 
 
 /** Working-copy changes vs. the imported version (opened from the Git panel). */
 export function GitDiffTab({ repoId, path }: { repoId: string; path: string }) {
+  const monacoTheme = useMonacoTheme();
   const v = useGitVersions(repoId, path);
   const openFile = useIde((s) => s.openFile);
   return (
@@ -209,7 +212,7 @@ export function GitDiffTab({ repoId, path }: { repoId: string; path: string }) {
       </div>
       <div className="min-h-0 flex-1">
         {v.error ? <div className="p-4 text-destructive">{(v.error as Error).message}</div> : (
-          <DiffEditor key={path} height="100%" theme="vs-dark" language={languageOf(path)} original={v.data?.original ?? ""} modified={v.data?.modified ?? ""} options={DIFF_OPTS} />
+          <DiffEditor key={path} height="100%" theme={monacoTheme} language={languageOf(path)} original={v.data?.original ?? ""} modified={v.data?.modified ?? ""} options={DIFF_OPTS} />
         )}
       </div>
     </div>

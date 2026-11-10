@@ -1,7 +1,7 @@
 "use client";
 import { useEffect } from "react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
-import { Bot, Boxes, FlaskConical, ChevronUp, FolderTree, GitBranch, GitCommitHorizontal, Loader2, PanelBottom, PanelRight, Plus, RefreshCw, Search, Sparkles, Terminal } from "lucide-react";
+import { Bot, Boxes, FlaskConical, ChevronUp, FolderTree, Gauge, GitBranch, GitCommitHorizontal, GitPullRequest, Loader2, PanelBottom, PanelRight, Plus, RefreshCw, Search, Sparkles, Terminal } from "lucide-react";
 import { useActiveIndexing, useGitStatus, useHealth, useRepos, useReindex } from "@/hooks/queries";
 import { useQueryClient } from "@tanstack/react-query";
 import { useIde, type SidebarView } from "@/store/ide";
@@ -15,6 +15,9 @@ import { CommandPalette } from "./CommandPalette";
 import { EditorArea } from "./EditorArea";
 import { Explorer } from "./Explorer";
 import { GitPanel } from "./GitPanel";
+import { GithubPanel } from "./GithubPanel";
+import { usePendingActions } from "./Approvals";
+import { SandboxBadge } from "./QualityTab";
 import { RepoPanel } from "./RepoPanel";
 import { ExperimentsPanel } from "./ExperimentsPanel";
 import { toast } from "sonner";
@@ -31,6 +34,8 @@ function ActivityBar() {
   const repoId = useIde((s) => s.repoId);
   const git = useGitStatus(repoId);
   const n = git.data?.files.length ?? 0;
+  const approvals = (usePendingActions(repoId).data ?? []).filter((a) => a.status === "pending").length;
+  const openQuality = useIde((s) => s.openQuality);
   const Btn = ({ id, icon, label, badge }: { id: SidebarView; icon: React.ReactNode; label: string; badge?: number }) => (
     <Tip label={label} side="right">
       <button onClick={() => setSidebar(id)} className={cn("relative flex size-10 items-center justify-center text-muted-foreground hover:text-foreground [&_svg]:size-5", sidebar === id && "border-l-2 border-primary text-foreground")}>
@@ -45,6 +50,8 @@ function ActivityBar() {
       <Btn id="repo" icon={<Boxes />} label="Repository: stats, branches, commits" />
       <Btn id="experiments" icon={<FlaskConical />} label="Retrieval experiments" />
       <Btn id="git" icon={<GitBranch />} label="Git changes" badge={n} />
+      <Btn id="github" icon={<GitPullRequest />} label="GitHub: pull requests, issues, approvals" badge={approvals} />
+      <Tip label="Code quality: tests, coverage, lint, security" side="right"><button onClick={openQuality} className="flex size-10 items-center justify-center text-muted-foreground hover:text-foreground [&_svg]:size-5"><Gauge /></button></Tip>
     </div>
   );
 }
@@ -57,7 +64,8 @@ function TopBar({ onAdd }: { onAdd: () => void }) {
   const reindex = useReindex();
   return (
     <div className="flex h-10 shrink-0 items-center gap-2 border-b bg-panel px-3">
-      <div className="flex items-center gap-1.5 font-semibold"><Sparkles className="size-4 text-primary" />Codebase Agent</div>
+      <div className="flex items-center gap-1.5 font-semibold"><Sparkles className="size-4 text-primary" />CodeScout AI</div>
+      <SandboxBadge />
       <select value={repoId ?? ""} onChange={(e) => setRepoId(e.target.value || null)} className="ml-3 h-7 max-w-64 rounded-md border border-input bg-background px-2 text-xs">
         {!repos.data?.length && <option value="">No repositories</option>}
         {repos.data?.map((r) => <option key={r.id} value={r.id}>{r.name}{r.branch ? `  ·  ${r.branch}` : r.commit ? `  ·  ${r.commit}` : ""}</option>)}
@@ -182,6 +190,7 @@ export function Workbench() {
               {sidebar === "repo" && <RepoPanel repoId={repoId} />}
               {sidebar === "experiments" && <ExperimentsPanel repoId={repoId} />}
               {sidebar === "git" && <GitPanel repoId={repoId} />}
+              {sidebar === "github" && <GithubPanel repoId={repoId} />}
             </Panel>
             <Handle />
             <Panel id="main" order={2} minSize={30} className="relative">

@@ -6,20 +6,13 @@ import { cn } from "@/lib/utils";
 export const Tabs = TabsPrimitive.Root;
 
 export const TabsList = React.forwardRef<React.ElementRef<typeof TabsPrimitive.List>, React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>>(
-  ({ className, ...props }, ref) => <TabsPrimitive.List ref={ref} className={cn("inline-flex items-center", className)} {...props} />,
+  ({ className, ...props }, ref) => <TabsPrimitive.List ref={ref} className={cn("inline-flex items-center gap-1", className)} {...props} />,
 );
 TabsList.displayName = "TabsList";
 
 export const TabsTrigger = React.forwardRef<React.ElementRef<typeof TabsPrimitive.Trigger>, React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>>(
   ({ className, ...props }, ref) => (
-    <TabsPrimitive.Trigger
-      ref={ref}
-      className={cn(
-        "inline-flex items-center gap-1.5 whitespace-nowrap border-b-2 border-transparent px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground data-[state=active]:border-primary data-[state=active]:text-foreground",
-        className,
-      )}
-      {...props}
-    />
+    <TabsPrimitive.Trigger ref={ref} className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border-b-2 border-transparent px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 data-[state=active]:border-primary data-[state=active]:text-foreground", className)} {...props} />
   ),
 );
 TabsTrigger.displayName = "TabsTrigger";
