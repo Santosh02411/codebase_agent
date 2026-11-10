@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useRef } from "react";
+import { useCallback } from "react";
 import { toast } from "sonner";
 import { useIde } from "@/store/ide";
 import { streamAgent } from "@/lib/stream";
@@ -25,10 +25,12 @@ function toProposal(mode: Mode, d: ResultData, title: string): Proposal | null {
 }
 
 /** Starts an agent run and streams every event into the store (chat message, activity timeline, sources, tests). */
-export function useAgentRun() {
-  const abort = useRef<AbortController | null>(null);
+let currentAbort: AbortController | null = null;   // module scope: the run keeps going (and can be stopped) when the user navigates between pages
 
-  const stop = useCallback(() => abort.current?.abort(), []);
+export function useAgentRun() {
+  const abort = { get current() { return currentAbort; }, set current(v: AbortController | null) { currentAbort = v; } };
+
+  const stop = useCallback(() => currentAbort?.abort(), []);
 
   const run = useCallback(async (mode: Mode, text: string, opts: { target?: string } = {}) => {
     const s = useIde.getState();
@@ -42,7 +44,9 @@ export function useAgentRun() {
     const runId = uid(), msgId = uid();
     const label = text.trim().slice(0, 60) || opts.target || LABEL[mode];
 
-    s.addMessage({ id: uid(), role: "user", mode, text: text || LABEL[mode], attachment, ts: Date.now() });
+    const shots = s.screenshots;
+    s.addMessage({ id: uid(), role: "user", mode, text: text || (shots.length ? "See the attached screenshot." : LABEL[mode]), attachment, shots: shots.length ? shots : undefined, ts: Date.now() });
+    s.clearScreenshots();
     s.addMessage({ id: msgId, role: "assistant", mode, text: "", runId, state: "running", ts: Date.now() });
     s.startRun({ id: runId, mode, label, started: Date.now(), state: "running", events: [] });
     s.setAttachment(null);
@@ -62,13 +66,16 @@ export function useAgentRun() {
         finished = true;
         const d = e.data;
         const sources: Source[] = d.sources ?? [];
-        const proposal = toProposal(mode, d, label);
+        if (d.conversation_id) st.setConversationId(d.conversation_id);
+        // a patch the server stored is reviewed from the server's exact before/after text; the client-side proposal is only the fallback
+        const proposal = d.patch_id ? null : toProposal(mode, d, label);
         if (proposal) st.addProposal(proposal);
         if (d.test_before) st.addTest(`${LABEL[mode]} · before change`, d.test_before);
         if (d.test_after) st.addTest(`${LABEL[mode]} · after change`, d.test_after);
-        st.patchMessage(msgId, { state: "done", result: d, sources, findings: d.findings, proposalId: proposal?.id });
+        st.patchMessage(msgId, { state: "done", result: d, sources, findings: d.findings, proposalId: proposal?.id, patchId: d.patch_id ?? undefined });
         st.finishRun(runId, "done");
-        if (proposal) { st.openReview(proposal.id); toast.success("A change is ready to review"); }
+        if (d.patch_id) { st.openPatch(d.patch_id, label); toast.success("A patch is ready to review. Nothing has been changed yet."); }
+        else if (proposal) { st.openReview(proposal.id); toast.success("A change is ready to review"); }
         else if (d.findings) st.setBottom("problems");
         else if (sources.length && mode === "chat") st.setBottom("sources");
       } else if (e.type === "error") {
@@ -79,7 +86,8 @@ export function useAgentRun() {
     };
 
     try {
-      await streamAgent({ repo_id: s.repoId, mode, text: question, target: opts.target, provider: s.provider, verify: s.verify }, onEvent, ctl.signal);
+      await streamAgent({ repo_id: s.repoId, mode, text: question, target: opts.target, provider: s.provider, verify: s.verify, conversation_id: s.conversationId ?? undefined,
+        images: shots.length ? shots.map(({ media_type, data }) => ({ media_type, data })) : undefined }, onEvent, ctl.signal);
       if (!finished) { useIde.getState().patchMessage(msgId, { state: "error", error: "The stream ended without a result" }); useIde.getState().finishRun(runId, "error"); }
     } catch (err) {
       const st = useIde.getState();
@@ -93,6 +101,7 @@ export function useAgentRun() {
     } finally {
       abort.current = null;
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return { run, stop };
