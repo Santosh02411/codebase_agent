@@ -2,49 +2,123 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Semantic design tokens. Every colour in the product comes from these variables; the light theme is a full palette of its own
+   (not an inverted dark one), with contrast checked for text on surface, muted text, and tinted status badges. */
 @layer base {
   :root {
-    --background: 222 16% 10%;
-    --foreground: 214 20% 88%;
-    --panel: 222 16% 12%;
-    --primary: 213 94% 62%;
-    --primary-foreground: 222 30% 8%;
-    --secondary: 222 14% 18%;
-    --secondary-foreground: 214 20% 88%;
-    --muted: 222 14% 16%;
-    --muted-foreground: 215 12% 60%;
-    --accent: 222 14% 21%;
-    --accent-foreground: 214 20% 94%;
-    --destructive: 0 72% 56%;
+    color-scheme: light;
+    --background: 220 20% 97.5%;
+    --foreground: 224 25% 11%;
+    --panel: 0 0% 100%;
+    --surface: 220 18% 95.5%;
+    --sidebar: 220 20% 96%;
+    --primary: 245 72% 52%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 16% 93%;
+    --secondary-foreground: 224 25% 18%;
+    --muted: 220 16% 94%;
+    --muted-foreground: 220 9% 38%;
+    --accent: 220 18% 92%;
+    --accent-foreground: 224 25% 11%;
+    --destructive: 0 68% 44%;
     --destructive-foreground: 0 0% 100%;
-    --success: 142 62% 48%;
-    --warning: 38 92% 56%;
-    --border: 222 14% 22%;
-    --input: 222 14% 24%;
-    --ring: 213 94% 62%;
+    --success: 152 62% 28%;
+    --warning: 30 92% 33%;
+    --info: 205 88% 36%;
+    --border: 220 14% 88%;
+    --input: 220 14% 82%;
+    --ring: 245 72% 52%;
     --radius: 0.5rem;
+    --shadow-card: 0 1px 2px hsl(224 30% 20% / 0.05), 0 0 0 1px hsl(220 14% 88% / 0.6);
+    --shadow-pop: 0 8px 28px hsl(224 30% 20% / 0.14), 0 0 0 1px hsl(220 14% 86%);
+    --chart-1: 245 72% 52%; --chart-2: 190 80% 36%; --chart-3: 152 62% 32%; --chart-4: 30 92% 42%; --chart-5: 330 70% 46%; --chart-6: 262 60% 55%;
+    --tok-keyword: 262 70% 45%; --tok-string: 152 60% 28%; --tok-number: 30 85% 36%; --tok-comment: 220 9% 46%; --tok-fn: 215 80% 40%; --tok-type: 190 80% 30%;
+  }
+  .dark {
+    color-scheme: dark;
+    --background: 228 14% 7%;
+    --foreground: 220 14% 91%;
+    --panel: 228 13% 9.5%;
+    --surface: 228 12% 12%;
+    --sidebar: 228 14% 8%;
+    --primary: 245 85% 70%;
+    --primary-foreground: 228 30% 8%;
+    --secondary: 228 11% 15%;
+    --secondary-foreground: 220 14% 88%;
+    --muted: 228 11% 14%;
+    --muted-foreground: 220 9% 62%;
+    --accent: 228 11% 17%;
+    --accent-foreground: 220 14% 95%;
+    --destructive: 0 72% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 152 58% 52%;
+    --warning: 38 92% 58%;
+    --info: 205 90% 62%;
+    --border: 228 10% 17%;
+    --input: 228 10% 22%;
+    --ring: 245 85% 70%;
+    --shadow-card: 0 1px 2px hsl(0 0% 0% / 0.35), 0 0 0 1px hsl(228 10% 17% / 0.9);
+    --shadow-pop: 0 10px 34px hsl(0 0% 0% / 0.55), 0 0 0 1px hsl(228 10% 22%);
+    --chart-1: 245 85% 70%; --chart-2: 190 80% 58%; --chart-3: 152 58% 52%; --chart-4: 38 92% 58%; --chart-5: 330 75% 66%; --chart-6: 262 70% 72%;
+    --tok-keyword: 262 80% 74%; --tok-string: 152 55% 60%; --tok-number: 30 90% 64%; --tok-comment: 220 9% 52%; --tok-fn: 212 90% 70%; --tok-type: 190 70% 62%;
   }
   * { @apply border-border; }
-  html, body { height: 100%; overflow: hidden; }
-  body { @apply bg-background text-foreground font-sans antialiased text-[13px]; }
+  html, body { height: 100%; }
+  body { @apply bg-background text-foreground font-sans antialiased text-[13px]; font-feature-settings: "cv11", "ss01"; letter-spacing: -0.003em; }
+  h1, h2, h3 { letter-spacing: -0.015em; }
+  ::selection { background: hsl(var(--primary) / 0.25); }
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 8px; border: 2px solid transparent; background-clip: content-box; }
   ::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground) / 0.5); background-clip: content-box; border: 2px solid transparent; }
+  :focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
 }
+
+/* Smooth theme switching (disabled for users who prefer reduced motion). */
+@media (prefers-reduced-motion: no-preference) {
+  html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *::after { transition: background-color .22s ease, border-color .22s ease, color .18s ease, fill .2s ease, stroke .2s ease !important; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
 
 /* Editor decorations (see MonacoEditor.tsx) */
 .reveal-line { background: hsl(var(--primary) / 0.18); }
 .reveal-glyph { background: hsl(var(--primary)); width: 3px !important; margin-left: 3px; }
 
-/* Markdown rendered inside chat messages */
-.prose-chat { line-height: 1.55; word-break: break-word; }
-.prose-chat > * + * { margin-top: 0.6rem; }
-.prose-chat h1, .prose-chat h2, .prose-chat h3 { font-weight: 600; margin-top: 0.9rem; }
-.prose-chat h1 { font-size: 1.05rem; } .prose-chat h2 { font-size: 1rem; } .prose-chat h3 { font-size: 0.95rem; }
-.prose-chat ul { list-style: disc; padding-left: 1.2rem; }
-.prose-chat ol { list-style: decimal; padding-left: 1.2rem; }
-.prose-chat a { color: hsl(var(--primary)); text-decoration: underline; }
-.prose-chat code:not(pre code) { background: hsl(var(--secondary)); padding: 0.1rem 0.35rem; border-radius: 4px; font-family: theme(fontFamily.mono); font-size: 0.92em; }
-.prose-chat table { border-collapse: collapse; font-size: 0.92em; }
-.prose-chat th, .prose-chat td { border: 1px solid hsl(var(--border)); padding: 0.25rem 0.5rem; }
+/* Markdown rendered inside chat messages and reports */
+.prose-chat { line-height: 1.6; word-break: break-word; font-size: 13.5px; }
+.prose-chat > * + * { margin-top: 0.7rem; }
+.prose-chat h1, .prose-chat h2, .prose-chat h3 { font-weight: 600; margin-top: 1rem; }
+.prose-chat h1 { font-size: 1.1rem; } .prose-chat h2 { font-size: 1.02rem; } .prose-chat h3 { font-size: 0.96rem; }
+.prose-chat ul { list-style: disc; padding-left: 1.25rem; }
+.prose-chat ol { list-style: decimal; padding-left: 1.25rem; }
+.prose-chat li + li { margin-top: 0.2rem; }
+.prose-chat a { color: hsl(var(--primary)); text-decoration: underline; text-underline-offset: 2px; }
+.prose-chat code:not(pre code) { background: hsl(var(--secondary)); padding: 0.1rem 0.35rem; border-radius: 4px; font-family: theme(fontFamily.mono); font-size: 0.9em; }
+.prose-chat table { border-collapse: collapse; font-size: 0.92em; display: block; overflow-x: auto; }
+.prose-chat th, .prose-chat td { border: 1px solid hsl(var(--border)); padding: 0.3rem 0.55rem; }
+.prose-chat th { background: hsl(var(--muted)); text-align: left; }
 .prose-chat blockquote { border-left: 3px solid hsl(var(--border)); padding-left: 0.75rem; color: hsl(var(--muted-foreground)); }
+
+/* Syntax highlighting (highlight.js classes) mapped to theme tokens, so code blocks follow the active theme. */
+.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-built_in, .hljs-meta { color: hsl(var(--tok-keyword)); }
+.hljs-string, .hljs-regexp, .hljs-addition { color: hsl(var(--tok-string)); }
+.hljs-number, .hljs-symbol, .hljs-bullet { color: hsl(var(--tok-number)); }
+.hljs-comment, .hljs-quote { color: hsl(var(--tok-comment)); font-style: italic; }
+.hljs-title, .hljs-function, .hljs-section, .hljs-attr, .hljs-attribute { color: hsl(var(--tok-fn)); }
+.hljs-type, .hljs-class .hljs-title, .hljs-variable, .hljs-params { color: hsl(var(--tok-type)); }
+.hljs-deletion { color: hsl(var(--destructive)); }
+
+/* React Flow, themed */
+.react-flow { --xy-edge-stroke-default: hsl(var(--muted-foreground) / 0.45); }
+.react-flow__controls { box-shadow: var(--shadow-card) !important; border-radius: 8px; overflow: hidden; }
+.react-flow__controls-button { background: hsl(var(--panel)) !important; color: hsl(var(--foreground)) !important; border-bottom: 1px solid hsl(var(--border)) !important; }
+.react-flow__controls-button:hover { background: hsl(var(--accent)) !important; }
+.react-flow__controls-button svg { fill: currentColor !important; }
+.react-flow__minimap { background: hsl(var(--panel)) !important; border-radius: 8px; box-shadow: var(--shadow-card); }
+.react-flow__attribution { display: none; }
+.react-flow__edge-path { transition: stroke .15s, opacity .15s; }
+
+/* Light-theme fixes for the legacy IDE view, which uses fixed Tailwind palette colours made for a dark background. */
+:root:not(.dark) .text-emerald-300, :root:not(.dark) .text-emerald-400 { color: hsl(152 62% 26%); }
+:root:not(.dark) .text-red-300, :root:not(.dark) .text-red-400 { color: hsl(0 68% 40%); }
+:root:not(.dark) .text-amber-200, :root:not(.dark) .text-amber-300, :root:not(.dark) .text-amber-400 { color: hsl(30 92% 30%); }
+:root:not(.dark) .text-sky-300, :root:not(.dark) .text-sky-400 { color: hsl(205 88% 32%); }
