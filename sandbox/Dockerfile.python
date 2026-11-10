@@ -1,0 +1,7 @@
+# Python sandbox: the test runner and the analysis tools. Runs as a non-root user with no network; see app/sandbox_exec.py for the run flags.
+FROM python:3.12-slim
+ENV PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1 PYTHONDONTWRITEBYTECODE=1
+RUN pip install --no-cache-dir pytest pytest-cov coverage ruff pylint mypy bandit semgrep pip-audit \
+    && useradd -m -u 65534 -o sandbox || true
+COPY semgrep-rules /opt/semgrep-rules
+WORKDIR /work
