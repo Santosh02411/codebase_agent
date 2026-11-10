@@ -1,14 +1,14 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { AgentEvent, ChatMessage, Decision, Mode, Proposal, Run, TermLine, TestEntry, TestRun } from "@/lib/types";
+import type { AgentEvent, ChatMessage, Decision, Mode, Proposal, Run, ScreenshotIn, TermLine, TestEntry, TestRun } from "@/lib/types";
 import { basename, uid } from "@/lib/utils";
 
-export type SidebarView = "explorer" | "search" | "repo" | "experiments" | "git";
+export type SidebarView = "explorer" | "search" | "repo" | "experiments" | "git" | "github";
 export type BottomTab = "activity" | "terminal" | "tests" | "sources" | "problems";
 export type PaletteMode = "files" | "symbols" | "workspace" | "commands";
 
 export interface GraphFocus { mode: "calls" | "modules"; focus?: string }
-export interface Tab { id: string; kind: "file" | "review" | "diff" | "graph" | "experiment"; experimentId?: string; path?: string; proposalId?: string; title: string; graph?: GraphFocus }
+export interface Tab { id: string; kind: "file" | "review" | "patch" | "quality" | "diff" | "graph" | "experiment"; experimentId?: string; path?: string; proposalId?: string; patchId?: string; title: string; graph?: GraphFocus }
 export interface Selection { file: string; startLine: number; endLine: number; text: string }
 export interface Reveal { path: string; line: number; endLine: number; nonce: number }
 
@@ -24,6 +24,8 @@ interface IdeState {
   tabs: Tab[]; activeTabId: string | null;
   openFile: (path: string, line?: number, endLine?: number) => void;
   openReview: (proposalId: string) => void;
+  openPatch: (patchId: string, title: string) => void;
+  openQuality: () => void;
   openDiff: (path: string) => void;
   openGraph: (mode: "calls" | "modules", focus: string | undefined, title: string) => void;
   openExperiment: (id: string, title: string) => void;
@@ -35,12 +37,15 @@ interface IdeState {
   cursor: { line: number; col: number }; setCursor: (line: number, col: number) => void;
   selection: Selection | null; setSelection: (s: Selection | null) => void;
   attachment: Selection | null; setAttachment: (s: Selection | null) => void;
+  screenshots: ScreenshotIn[]; addScreenshot: (s: ScreenshotIn) => void; removeScreenshot: (i: number) => void; clearScreenshots: () => void;
+  conversationId: string | null; setConversationId: (id: string | null) => void;
 
   mode: Mode; setMode: (m: Mode) => void;
   provider: string; setProvider: (p: string) => void;
   verify: boolean; setVerify: (v: boolean) => void;
 
   messages: ChatMessage[];
+  resetChat: () => void;
   addMessage: (m: ChatMessage) => void;
   patchMessage: (id: string, p: Partial<ChatMessage>) => void;
 
@@ -64,7 +69,7 @@ interface IdeState {
 
 const SESSION = {
   tabs: [] as Tab[], activeTabId: null as string | null, reveal: null as Reveal | null, buffers: {} as Record<string, string>,
-  selection: null as Selection | null, attachment: null as Selection | null, messages: [] as ChatMessage[], runs: [] as Run[],
+  selection: null as Selection | null, attachment: null as Selection | null, screenshots: [] as ScreenshotIn[], conversationId: null as string | null, messages: [] as ChatMessage[], runs: [] as Run[],
   activeRunId: null as string | null, proposals: {} as Record<string, Proposal>, termLines: [] as TermLine[], termHistory: [] as string[],
   testRuns: [] as TestEntry[],
 };
@@ -97,6 +102,13 @@ export const useIde = create<IdeState>()(
           const id = `review:${proposalId}`;
           const title = `Review: ${s.proposals[proposalId]?.title ?? "changes"}`;
           return { tabs: s.tabs.some((t) => t.id === id) ? s.tabs : [...s.tabs, { id, kind: "review" as const, proposalId, title }], activeTabId: id };
+        }),
+      openQuality: () =>
+        set((s) => ({ tabs: s.tabs.some((t) => t.id === "quality") ? s.tabs : [...s.tabs, { id: "quality", kind: "quality" as const, title: "Code quality" }], activeTabId: "quality" })),
+      openPatch: (patchId, title) =>
+        set((s) => {
+          const id = `patch:${patchId}`;
+          return { tabs: s.tabs.some((t) => t.id === id) ? s.tabs : [...s.tabs, { id, kind: "patch" as const, patchId, title: `Patch: ${title}`.slice(0, 48) }], activeTabId: id };
         }),
       openDiff: (path) =>
         set((s) => {
@@ -133,12 +145,16 @@ export const useIde = create<IdeState>()(
       cursor: { line: 1, col: 1 }, setCursor: (line, col) => set({ cursor: { line, col } }),
       selection: null, setSelection: (selection) => set({ selection }),
       attachment: null, setAttachment: (attachment) => set({ attachment }),
+      screenshots: [], addScreenshot: (sc) => set((s) => ({ screenshots: [...s.screenshots, sc].slice(0, 3) })),
+      removeScreenshot: (i) => set((s) => ({ screenshots: s.screenshots.filter((_, j) => j !== i) })), clearScreenshots: () => set({ screenshots: [] }),
+      conversationId: null, setConversationId: (conversationId) => set({ conversationId }),
 
       mode: "chat", setMode: (mode) => set({ mode }),
       provider: "", setProvider: (provider) => set({ provider }),
       verify: true, setVerify: (verify) => set({ verify }),
 
       messages: [],
+      resetChat: () => set({ messages: [], runs: [], activeRunId: null, conversationId: null, proposals: {}, attachment: null, screenshots: [] }),
       addMessage: (m) => set((s) => ({ messages: [...s.messages, m] })),
       patchMessage: (id, p) => set((s) => ({ messages: s.messages.map((m) => (m.id === id ? { ...m, ...p } : m)) })),
 
