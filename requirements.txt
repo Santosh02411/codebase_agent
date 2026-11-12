@@ -10,6 +10,9 @@ google-genai>=0.3
 pytest>=8.0
 python-dotenv>=1.0
 httpx>=0.27
+# Linter used by the run_linter tool and by patch verification (optional: a built-in syntax check is used when it is missing)
+ruff>=0.5
+# PyYAML: YAML syntax checks in the code review, and rejecting a patch that breaks a .yaml file
 # Code intelligence (Tree-sitter). Optional at runtime: without them JS/TS fall back to a regex extractor and Java/C/C++/Go/Rust get no symbols.
 tree-sitter>=0.23
 tree-sitter-python>=0.23
@@ -27,3 +30,4 @@ pgvector>=0.3
 #   sentence-transformers   BGE / E5 / Jina embeddings and cross-encoder rerankers
 #   fastembed               ONNX embeddings without PyTorch
 #   tiktoken                exact token counts for the context budget
+pyyaml>=6

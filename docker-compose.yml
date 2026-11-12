@@ -18,6 +18,14 @@ services:
     env_file: .env                      # copy .env.example to .env first
     environment:
       DATABASE_URL: postgresql://agent:agent@db:5432/codeagent   # chunks, metadata and vectors live in PostgreSQL
+      # CODE EXECUTION SANDBOX (docs/SANDBOX.md). As shipped this container has no Docker client and no daemon, so SANDBOX_MODE=docker (the
+      # default) REFUSES to run any repository code: tests/linters report "sandbox unavailable". That is the safe failure. To enable it:
+      #   1. build the images on the sandbox host:  scripts/build_sandbox.sh
+      #   2. give the API a Docker CLI (add it to the Dockerfile) and point it at a daemon that is NOT this machine's main daemon, e.g. a
+      #      dedicated VM with TLS:   DOCKER_HOST: tcp://sandbox-host:2376   (plus DOCKER_TLS_VERIFY / DOCKER_CERT_PATH)
+      #      Do not mount /var/run/docker.sock into this container: that is root on the host.
+      # SANDBOX_MAX_CONCURRENT: 2
+      # RATE_LIMIT_PER_MINUTE: 30
     volumes: ["agent-data:/data"]       # working copies of imported repositories + experiment results
     depends_on:
       db:
