@@ -41,7 +41,8 @@ def test_git_flow_after_apply(client):
     assert {f["path"]: f["status"] for f in st["files"]} == {"notes.txt": "untracked"}
     v = c.get(f"/repositories/{rid}/git/file", params={"path": "notes.txt"}).json()
     assert v["is_new"] and v["modified"] == "hi\n"
-    assert c.post("/git/discard", json={"repo_id": rid, "path": "notes.txt"}).json()["files"] == []
+    assert c.post("/git/discard", json={"repo_id": rid, "path": "notes.txt"}).status_code == 403        # discarding needs explicit approval
+    assert c.post("/git/discard", json={"repo_id": rid, "path": "notes.txt", "approved": True}).json()["files"] == []
     assert c.get(f"/repositories/{rid}/git/file", params={"path": "../x"}).status_code == 400
 
 

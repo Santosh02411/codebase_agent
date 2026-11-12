@@ -381,7 +381,7 @@ def count_rows(api, table):
 def test_agent_chat_with_citations_on_postgres(api, tmp_path, monkeypatch):
     from tests.helpers import ScriptedLLM
     rid = api.post("/repositories", json={"source": str(FIXTURE), "name": "d"}).json()["id"]
-    script = {"analyze_query": {"intent": "explain", "queries": ["calculate delivery eta"]},
+    script = {"understand": {"intent": "explain", "queries": ["calculate delivery eta"]},
               "analyze": {"need_more": False, "follow_up_queries": [], "answer": "It is computed in [1].", "affected_file": "", "affected_function": ""}}
     monkeypatch.setattr(api.main, "get_llm", lambda p=None: ScriptedLLM(script))
     res = api.post("/chat", json={"repo_id": rid, "question": "where is the eta calculated?"}).json()

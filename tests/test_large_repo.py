@@ -99,4 +99,4 @@ def test_ui_is_served(tmp_path, monkeypatch):
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     import app.main as m
     r = TestClient(m.app).get("/")
-    assert r.status_code == 200 and "Codebase" in r.text
+    assert r.status_code == 200 and "CodeScout" in r.text

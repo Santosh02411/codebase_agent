@@ -38,7 +38,7 @@ def test_failed_patch_is_retried_then_reported(engine, tools):
 
 def test_follow_up_retrieval_round(engine, tools):
     _engine_or_skip(engine)
-    script = {"analyze_query": {"intent": "explain", "queries": ["delivery"]},
+    script = {"understand": {"intent": "explain", "queries": ["delivery"]},
               "analyze": [{"need_more": True, "follow_up_queries": ["authenticate_user"]},
                           {"need_more": False, "answer": "ok", "affected_file": "auth.py"}]}
     st = run_agent(AgentRuntime(ScriptedLLM(script), tools, get_settings()), new_state("q", "r"), engine)

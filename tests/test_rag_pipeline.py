@@ -282,7 +282,7 @@ def test_chat_answer_citations_are_validated_and_sources_sorted(tmp_path, monkey
     m._service = None
     c = TestClient(m.app)
     rid = c.post("/repositories", json={"source": str(FIXTURE), "name": "d"}).json()["id"]
-    script = {"analyze_query": {"intent": "explain", "queries": ["calculate delivery eta"]},
+    script = {"understand": {"intent": "explain", "queries": ["calculate delivery eta"]},
               "analyze": {"need_more": False, "follow_up_queries": [], "answer": "ETA is computed in [2] using the speed from [99].", "affected_file": "", "affected_function": ""}}
     monkeypatch.setattr(m, "get_llm", lambda p=None: ScriptedLLM(script))
     res = c.post("/chat", json={"repo_id": rid, "question": "where is the eta calculated?"}).json()
